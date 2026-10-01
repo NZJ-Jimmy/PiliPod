@@ -169,6 +169,33 @@ struct VideoDetailPlayerSurfaceView: View {
             .frame(width: videoRenderSize.width, height: videoRenderSize.height, alignment: .center)
 
             gestureOverlay
+#if canImport(UIKit)
+            PlayerSpeedBoostTouchView(
+                onTouchDown: { y in
+                    let playerY = y + (playerHeight - gestureHitAreaHeight) / 2
+                    let isOverVisibleControls = controlsVisible && (
+                        playerY < max(72, safeAreaInsets.top + 56) ||
+                        playerY > playerHeight - max(112, safeAreaInsets.bottom + 96)
+                    )
+                    if !isOverVisibleControls && !(controlsVisible && isFullscreenDanmakuPanelVisible) {
+                        startSpeedBoostPress()
+                    }
+                },
+                onTouchMovePastThreshold: {
+                    guard !isSpeedBoostActive else { return }
+                    cancelSpeedBoostPress()
+                },
+                onTouchUp: {
+                    cancelSpeedBoostPress()
+                    endSpeedBoostIfNeeded()
+                    if dragInteractionMode == .speedBoost {
+                        dragInteractionMode = .none
+                    }
+                }
+            )
+            .frame(width: playerWidth, height: gestureHitAreaHeight)
+            .allowsHitTesting(false)
+#endif
             danmakuOverlay
             subtitleOverlay
             loadingOverlay
@@ -195,7 +222,9 @@ struct VideoDetailPlayerSurfaceView: View {
         .onDisappear {
             player.setAmbientModeVisible(false)
             hideControlsTask?.cancel()
-            speedBoostTriggerTask?.cancel()
+            cancelSpeedBoostPress()
+            endSpeedBoostIfNeeded()
+            dragInteractionMode = .none
             stopDebugPanelRefresh()
         }
         .sheet(isPresented: $showDebugPanel, onDismiss: stopDebugPanelRefresh) {
@@ -536,9 +565,7 @@ struct VideoDetailPlayerSurfaceView: View {
                     dragInteractionMode = .horizontalSeek
                     isHorizontalSeeking = true
                     horizontalSeekBaseTime = playerUISnapshot.currentTime
-                    speedBoostTriggerTask?.cancel()
-                    speedBoostTriggerTask = nil
-                    isSpeedBoostPressing = false
+                    cancelSpeedBoostPress()
                     endSpeedBoostIfNeeded()
                 }
 
@@ -563,9 +590,7 @@ struct VideoDetailPlayerSurfaceView: View {
                     isBrightnessAdjusting = true
                     brightnessAdjustBaseValue = currentScreenBrightness()
                     brightnessPreviewValue = brightnessAdjustBaseValue
-                    speedBoostTriggerTask?.cancel()
-                    speedBoostTriggerTask = nil
-                    isSpeedBoostPressing = false
+                    cancelSpeedBoostPress()
                     endSpeedBoostIfNeeded()
                 }
 
@@ -591,9 +616,7 @@ struct VideoDetailPlayerSurfaceView: View {
                     isVolumeAdjusting = true
                     volumeAdjustBaseValue = currentSystemVolume()
                     volumePreviewValue = volumeAdjustBaseValue
-                    speedBoostTriggerTask?.cancel()
-                    speedBoostTriggerTask = nil
-                    isSpeedBoostPressing = false
+                    cancelSpeedBoostPress()
                     endSpeedBoostIfNeeded()
                 }
 
@@ -604,21 +627,6 @@ struct VideoDetailPlayerSurfaceView: View {
                     volumePreviewValue = target
                     setSystemVolume(target)
                     return
-                }
-
-                if !isSpeedBoostPressing {
-                    isSpeedBoostPressing = true
-                    speedBoostTriggerTask?.cancel()
-                    speedBoostTriggerTask = Task { @MainActor in
-                        do {
-                            try await Task.sleep(nanoseconds: 200000000)
-                        } catch {
-                            return
-                        }
-                        if isSpeedBoostPressing {
-                            beginSpeedBoostIfNeeded()
-                        }
-                    }
                 }
             }
             .onEnded { _ in
@@ -636,9 +644,7 @@ struct VideoDetailPlayerSurfaceView: View {
                     isVolumeAdjusting = false
                 }
 
-                isSpeedBoostPressing = false
-                speedBoostTriggerTask?.cancel()
-                speedBoostTriggerTask = nil
+                cancelSpeedBoostPress()
                 endSpeedBoostIfNeeded()
                 dragInteractionMode = .none
             }
@@ -739,6 +745,28 @@ struct VideoDetailPlayerSurfaceView: View {
                 controlsVisible = false
             }
         }
+    }
+
+    private func startSpeedBoostPress() {
+        guard !isSpeedBoostPressing else { return }
+        isSpeedBoostPressing = true
+        speedBoostTriggerTask?.cancel()
+        speedBoostTriggerTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 200_000_000)
+            } catch {
+                return
+            }
+            if isSpeedBoostPressing {
+                beginSpeedBoostIfNeeded()
+            }
+        }
+    }
+
+    private func cancelSpeedBoostPress() {
+        isSpeedBoostPressing = false
+        speedBoostTriggerTask?.cancel()
+        speedBoostTriggerTask = nil
     }
 
     private func beginSpeedBoostIfNeeded() {
@@ -888,3 +916,95 @@ struct VideoDetailPlayerSurfaceView: View {
         .transition(.opacity)
     }
 }
+
+#if canImport(UIKit)
+private struct PlayerSpeedBoostTouchView: UIViewRepresentable {
+    let onTouchDown: (CGFloat) -> Void
+    let onTouchMovePastThreshold: () -> Void
+    let onTouchUp: () -> Void
+
+    func makeUIView(context: Context) -> PlayerSpeedBoostTouchHostView {
+        PlayerSpeedBoostTouchHostView()
+    }
+
+    func updateUIView(_ uiView: PlayerSpeedBoostTouchHostView, context: Context) {
+        uiView.onTouchDown = onTouchDown
+        uiView.onTouchMovePastThreshold = onTouchMovePastThreshold
+        uiView.onTouchUp = onTouchUp
+    }
+}
+
+private final class PlayerSpeedBoostTouchHostView: UIView {
+    var onTouchDown: ((CGFloat) -> Void)?
+    var onTouchMovePastThreshold: (() -> Void)?
+    var onTouchUp: (() -> Void)?
+    private let touchRecognizer = PlayerSpeedBoostTouchRecognizer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        touchRecognizer.host = self
+        touchRecognizer.cancelsTouchesInView = false
+        touchRecognizer.delaysTouchesBegan = false
+        touchRecognizer.delaysTouchesEnded = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        touchRecognizer.view?.removeGestureRecognizer(touchRecognizer)
+        // The window receives edge touches before SwiftUI's drag gesture begins.
+        window?.addGestureRecognizer(touchRecognizer)
+    }
+
+    deinit {
+        touchRecognizer.view?.removeGestureRecognizer(touchRecognizer)
+    }
+}
+
+private final class PlayerSpeedBoostTouchRecognizer: UIGestureRecognizer {
+    weak var host: PlayerSpeedBoostTouchHostView?
+    private weak var activeTouch: UITouch?
+    private var startLocation: CGPoint?
+    private var movedPastThreshold = false
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard activeTouch == nil, let host, let touch = touches.first else { return }
+        let location = touch.location(in: host)
+        guard host.bounds.contains(location) else { return }
+        activeTouch = touch
+        startLocation = location
+        movedPastThreshold = false
+        host.onTouchDown?(location.y)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard !movedPastThreshold, let touch = activeTouch,
+              touches.contains(touch), let startLocation, let host
+        else { return }
+        let location = touch.location(in: host)
+        guard max(abs(location.x - startLocation.x), abs(location.y - startLocation.y)) > 18 else { return }
+        movedPastThreshold = true
+        host.onTouchMovePastThreshold?()
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        guard let touch = activeTouch, touches.contains(touch) else { return }
+        host?.onTouchUp?()
+        activeTouch = nil
+        startLocation = nil
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        guard let touch = activeTouch, touches.contains(touch) else { return }
+        host?.onTouchUp?()
+        activeTouch = nil
+        startLocation = nil
+    }
+}
+#endif
