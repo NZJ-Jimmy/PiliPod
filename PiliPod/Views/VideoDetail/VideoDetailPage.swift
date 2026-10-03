@@ -1987,7 +1987,7 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
     @ViewBuilder let introContent: () -> IntroContent
     @ViewBuilder let commentsContent: () -> CommentsContent
 
-    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var dragTranslation: CGFloat = 0
 
     private var currentIndex: CGFloat {
         switch selectedTab {
@@ -2008,14 +2008,13 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
                 .frame(width: width)
                 .frame(maxHeight: .infinity, alignment: .top)
         }
+        .offset(x: -currentIndex * width + dragOffset)
         .frame(width: width, alignment: .leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .offset(x: -currentIndex * width + dragOffset)
         .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.86), value: selectedTab)
         .contentShape(Rectangle())
-        // A transparent overlay here would intercept ScrollView and button
-        // touches. Keep the pager gesture simultaneous with the content
-        // instead, and leave the edge strip inert in the gesture callbacks.
+        // Reject unrelated pans before recognition, rather than ignoring their
+        // callbacks after a SwiftUI DragGesture has already claimed the touch.
         .simultaneousGesture(pagerGesture)
         .clipped()
     }
@@ -2025,27 +2024,21 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
         return dragTranslation
     }
 
-    private var pagerGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .updating($dragTranslation) { value, state, _ in
-                guard isSwipeEnabled else { return }
-                guard value.startLocation.x > leadingSwipeExclusionWidth else { return }
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-
-                let translation = value.translation.width
+    private var pagerGesture: VideoDetailTabPanGesture {
+        VideoDetailTabPanGesture(
+            isEnabled: isSwipeEnabled,
+            isIntro: selectedTab == .intro,
+            leadingExclusionWidth: leadingSwipeExclusionWidth,
+            onChanged: { translation in
                 if selectedTab == .intro {
-                    state = max(-width, min(0, translation))
+                    dragTranslation = max(-width, min(0, translation))
                 } else {
-                    state = max(0, min(width, translation))
+                    dragTranslation = max(0, min(width, translation))
                 }
-            }
-            .onEnded { value in
-                guard isSwipeEnabled else { return }
-                guard value.startLocation.x > leadingSwipeExclusionWidth else { return }
-                let dx = value.translation.width
-                let dy = value.translation.height
-                guard abs(dx) > abs(dy) else { return }
-
+            },
+            onEnded: { dx in
+                defer { dragTranslation = 0 }
+                guard isSwipeEnabled, let dx else { return }
                 let threshold = width * 0.2
                 switch selectedTab {
                 case .intro:
@@ -2056,6 +2049,7 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
                     selectedTab = .intro
                 }
             }
+        )
     }
 }
 
