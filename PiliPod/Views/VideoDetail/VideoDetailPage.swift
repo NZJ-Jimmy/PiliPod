@@ -2015,7 +2015,7 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
         .contentShape(Rectangle())
         // Reject unrelated pans before recognition, rather than ignoring their
         // callbacks after a SwiftUI DragGesture has already claimed the touch.
-        .simultaneousGesture(pagerGesture)
+        .gesture(pagerGesture)
         .clipped()
     }
 
