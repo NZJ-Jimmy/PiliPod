@@ -35,7 +35,9 @@ struct LoginImportView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [.json]
+            // File providers may identify JSON exports as generic data or text.
+            // Validate the actual JSON and account schema after selection.
+            allowedContentTypes: [.data]
         ) { result in
             switch result {
             case .success(let url):
