@@ -36,6 +36,13 @@ private struct AudioVideoSettingsView: View {
 
     var body: some View {
         Form {
+            Section("视频详情页") {
+                Toggle("使用简介 / 评论双 Tab 布局", isOn: $settings.usesLegacyVideoDetailTabs)
+                    .tint(Color("BiliPink"))
+            } footer: {
+                Text("关闭后，在简介下方显示评论预览，点击可查看全部评论。")
+            }
+
             Section {
                 Toggle("硬件解码", isOn: $settings.hardwareDecodingEnabled)
                     .tint(Color("BiliPink"))

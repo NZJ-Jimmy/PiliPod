@@ -235,6 +235,7 @@ struct AudioVideoSettings: Codable, Equatable {
     var highDynamicRangeEnabled = true
     var prefersEDROutput = true
     var hdrToneMapping: HDRToneMappingOption = .auto
+    var usesLegacyVideoDetailTabs = false
     var videoProgressBarStyle: VideoProgressBarStyle = .system
 
     private enum CodingKeys: String, CodingKey {
@@ -264,6 +265,7 @@ struct AudioVideoSettings: Codable, Equatable {
         case highDynamicRangeEnabled
         case prefersEDROutput
         case hdrToneMapping
+        case usesLegacyVideoDetailTabs
         case videoProgressBarStyle
     }
 
@@ -312,6 +314,7 @@ struct AudioVideoSettings: Codable, Equatable {
         highDynamicRangeEnabled = try container.decodeIfPresent(Bool.self, forKey: .highDynamicRangeEnabled) ?? true
         prefersEDROutput = try container.decodeIfPresent(Bool.self, forKey: .prefersEDROutput) ?? true
         hdrToneMapping = try container.decodeIfPresent(HDRToneMappingOption.self, forKey: .hdrToneMapping) ?? .auto
+        usesLegacyVideoDetailTabs = try container.decodeIfPresent(Bool.self, forKey: .usesLegacyVideoDetailTabs) ?? false
         videoProgressBarStyle = try container.decodeIfPresent(VideoProgressBarStyle.self, forKey: .videoProgressBarStyle) ?? .system
     }
 }
