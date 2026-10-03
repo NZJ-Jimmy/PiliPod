@@ -1,0 +1,65 @@
+name: Test and Build IPA
+
+on:
+  pull_request:
+  push:
+    branches: ['codex/gesture-lock']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Select iPhone simulator
+        run: |
+          xcodebuild -version
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for runtime,items in sorted(devices.items(), reverse=True) if "iOS-26" in runtime for d in items if "iPhone" in d["name"]))')
+          echo "SIMULATOR_ID=$SIMULATOR_ID" >> "$GITHUB_ENV"
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project PiliPod.xcodeproj -scheme PiliPod \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -only-testing:PiliPodTests -resultBundlePath build/Tests.xcresult \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
+      - name: Archive and package unsigned IPA
+        run: |
+          set -o pipefail
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          xcodebuild archive -project PiliPod.xcodeproj -scheme PiliPod \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/PiliPod.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" 2>&1 | tee archive.log
+          mkdir -p build/Payload
+          cp -R build/PiliPod.xcarchive/Products/Applications/PiliPod.app build/Payload/
+          cd build
+          zip -qr PiliPod-gesture-lock.ipa Payload
+          unzip -t PiliPod-gesture-lock.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiliPod-gesture-lock-IPA
+          path: build/PiliPod-gesture-lock.ipa
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-and-build-logs
+          path: |
+            test.log
+            archive.log
+            build/Tests.xcresult

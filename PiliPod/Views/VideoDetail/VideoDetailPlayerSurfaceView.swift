@@ -69,6 +69,7 @@ struct VideoDetailPlayerSurfaceView: View {
     @Binding var selectedSubtitleID: String?
 
     @State private var controlsVisible = true
+    @State private var areGesturesLocked = false
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var isSpeedBoostActive = false
     @State private var speedBoostMultiplier: Double = 2.0
@@ -139,6 +140,7 @@ struct VideoDetailPlayerSurfaceView: View {
             playerLayer
             controlsOverlay
                 .frame(width: containerSize.width, height: playerHeight, alignment: .center)
+            gestureLockOverlay
         }
         // Controls deliberately use the page's normal layout width. The video
         // canvas is wider in fullscreen so it can render into unsafe areas.
@@ -171,8 +173,13 @@ struct VideoDetailPlayerSurfaceView: View {
             gestureOverlay
 #if canImport(UIKit)
             PlayerSpeedBoostTouchView(
-                onTouchDown: { y in
-                    let playerY = y + (playerHeight - gestureHitAreaHeight) / 2
+                onTouchDown: { location in
+                    let playerY = location.y + (playerHeight - gestureHitAreaHeight) / 2
+                    let lockButtonX = (playerWidth - containerSize.width) / 2 + 12
+                    let isOverLockButton = (controlsVisible || areGesturesLocked) &&
+                        location.x >= lockButtonX && location.x <= lockButtonX + 44 &&
+                        abs(playerY - playerHeight / 2) <= 22
+                    guard !areGesturesLocked, !isOverLockButton else { return }
                     let isOverVisibleControls = controlsVisible && (
                         playerY < max(72, safeAreaInsets.top + 56) ||
                         playerY > playerHeight - max(112, safeAreaInsets.bottom + 96)
@@ -220,6 +227,7 @@ struct VideoDetailPlayerSurfaceView: View {
             showControlsAndAutoHideIfNeeded(forceShow: true)
         }
         .onDisappear {
+            areGesturesLocked = false
             player.setAmbientModeVisible(false)
             hideControlsTask?.cancel()
             cancelSpeedBoostPress()
@@ -298,6 +306,7 @@ struct VideoDetailPlayerSurfaceView: View {
                 .highPriorityGesture(
                     TapGesture(count: 2)
                         .onEnded {
+                            guard !areGesturesLocked else { return }
                             togglePlayback()
                             showControlsAndAutoHideIfNeeded(forceShow: true)
                         }
@@ -316,6 +325,36 @@ struct VideoDetailPlayerSurfaceView: View {
             config: danmakuOverlayConfig,
             isFullscreen: isFullscreen
         )
+    }
+
+    @ViewBuilder
+    private var gestureLockOverlay: some View {
+        if controlsVisible || areGesturesLocked {
+            Button(action: toggleGestureLock) {
+                Image(systemName: areGesturesLocked ? "lock.fill" : "lock.open.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+            }
+            .background(Circle().fill(Color.black.opacity(0.35)))
+            .glassEffect(.clear.interactive(), in: .circle)
+            .accessibilityLabel(areGesturesLocked ? "解锁播放手势" : "锁定播放手势")
+            .accessibilityValue(areGesturesLocked ? "已锁定" : "未锁定")
+            .padding(.leading, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+    }
+
+    private func toggleGestureLock() {
+        areGesturesLocked.toggle()
+        cancelSpeedBoostPress()
+        endSpeedBoostIfNeeded()
+        horizontalSeekPreviewTime = nil
+        isHorizontalSeeking = false
+        isBrightnessAdjusting = false
+        isVolumeAdjusting = false
+        dragInteractionMode = .none
+        showControlsAndAutoHideIfNeeded(forceShow: true)
     }
 
     private var subtitleOverlay: some View {
@@ -521,6 +560,7 @@ struct VideoDetailPlayerSurfaceView: View {
     private var playerGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
+                guard !areGesturesLocked else { return }
                 let startX = value.startLocation.x + playerGestureLeadingInset
 
                 if dragInteractionMode == .horizontalSeek {
@@ -630,7 +670,7 @@ struct VideoDetailPlayerSurfaceView: View {
                 }
             }
             .onEnded { _ in
-                if dragInteractionMode == .horizontalSeek, isHorizontalSeeking {
+                if !areGesturesLocked, dragInteractionMode == .horizontalSeek, isHorizontalSeeking {
                     if let seekTarget = horizontalSeekPreviewTime {
                         seekPlayback(to: seekTarget)
                     }
@@ -748,6 +788,7 @@ struct VideoDetailPlayerSurfaceView: View {
     }
 
     private func startSpeedBoostPress() {
+        guard !areGesturesLocked else { return }
         guard !isSpeedBoostPressing else { return }
         isSpeedBoostPressing = true
         speedBoostTriggerTask?.cancel()
@@ -770,6 +811,7 @@ struct VideoDetailPlayerSurfaceView: View {
     }
 
     private func beginSpeedBoostIfNeeded() {
+        guard !areGesturesLocked else { return }
         guard !isSpeedBoostActive else { return }
         guard dragInteractionMode == .none else { return }
         dragInteractionMode = .speedBoost
@@ -785,7 +827,7 @@ struct VideoDetailPlayerSurfaceView: View {
     private func endSpeedBoostIfNeeded() {
         guard isSpeedBoostActive else { return }
         isSpeedBoostActive = false
-        player.setPlaybackRate(1.0)
+        player.setPlaybackRate(selectedPlaybackRate)
     }
 
     private func togglePlayback() {
@@ -919,7 +961,7 @@ struct VideoDetailPlayerSurfaceView: View {
 
 #if canImport(UIKit)
 private struct PlayerSpeedBoostTouchView: UIViewRepresentable {
-    let onTouchDown: (CGFloat) -> Void
+    let onTouchDown: (CGPoint) -> Void
     let onTouchMovePastThreshold: () -> Void
     let onTouchUp: () -> Void
 
@@ -935,7 +977,7 @@ private struct PlayerSpeedBoostTouchView: UIViewRepresentable {
 }
 
 private final class PlayerSpeedBoostTouchHostView: UIView {
-    var onTouchDown: ((CGFloat) -> Void)?
+    var onTouchDown: ((CGPoint) -> Void)?
     var onTouchMovePastThreshold: (() -> Void)?
     var onTouchUp: (() -> Void)?
     private let touchRecognizer = PlayerSpeedBoostTouchRecognizer()
@@ -977,7 +1019,7 @@ private final class PlayerSpeedBoostTouchRecognizer: UIGestureRecognizer {
         activeTouch = touch
         startLocation = location
         movedPastThreshold = false
-        host.onTouchDown?(location.y)
+        host.onTouchDown?(location)
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
