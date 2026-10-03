@@ -20,7 +20,12 @@ struct BiliAccount: Codable, Identifiable {
     var accessKey: String?
     var refresh: String?
     var type: [Int]?
+    var username: String? = nil
     var id: String { cookies.DedeUserID }
+    var displayName: String {
+        guard let name = username?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return id }
+        return "\(name)（\(id)）"
+    }
     var cookieString: String {
         cookies.dictionary.keys.sorted().map { "\($0)=\(cookies.dictionary[$0] ?? "")" }.joined(separator: "; ")
     }
@@ -35,6 +40,8 @@ struct AccountState: Codable {
         return accounts.first { $0.id == id }
     }
     mutating func add(_ account: BiliAccount, activate: Bool) {
+        var account = account
+        if account.username == nil { account.username = accounts.first { $0.id == account.id }?.username }
         let wasEmpty = accounts.isEmpty
         accounts.removeAll { $0.id == account.id }
         accounts.append(account)
@@ -157,6 +164,18 @@ final class LoginSession: ObservableObject {
     func remove(_ id: String) throws { try update { $0.remove(id) } }
     @MainActor
     func setIncognito(_ enabled: Bool) throws { try update { $0.incognito = enabled } }
+    @MainActor
+    func updateUsername(_ username: String, for account: BiliAccount) throws {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let current = accounts.first(where: { $0.id == account.id }),
+              current.cookies.SESSDATA == account.cookies.SESSDATA,
+              current.username != name else { return }
+        try update { state in
+            guard let index = state.accounts.firstIndex(where: { $0.id == account.id }) else { return }
+            state.accounts[index].username = name
+        }
+    }
     @MainActor
     func restore(defaults: UserDefaults = .standard) {
         restoreFailed = false

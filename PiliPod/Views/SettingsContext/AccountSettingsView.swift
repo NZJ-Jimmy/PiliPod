@@ -19,6 +19,7 @@ struct AccountSettingsView: View {
             }
         }
         .navigationTitle("账号与隐私")
+        .task(id: session.accounts.map(\.id)) { await refreshAccountNames() }
         .fullScreenCover(isPresented: $showLogin) { LoginPageView() }
         .fileExporter(isPresented: $showExport, document: exportDocument,
                       contentType: .json, defaultFilename: "pilipod_account.json") { result in
@@ -53,13 +54,13 @@ struct AccountSettingsView: View {
             ForEach(AccountRole.allCases) { role in
                 Picker(role.title, selection: assignmentBinding(role)) {
                     Text("0（匿名）").tag("0")
-                    ForEach(session.accounts) { account in Text(account.id).tag(account.id) }
+                    ForEach(session.accounts) { account in Text(account.displayName).tag(account.id) }
                 }
             }
             Menu("快速统一切换") {
                 Button("0（匿名）") { perform { try session.assign("0") } }
                 ForEach(session.accounts) { account in
-                    Button(account.id) { perform { try session.assign(account.id) } }
+                    Button(account.displayName) { perform { try session.assign(account.id) } }
                 }
             }
         } footer: {
@@ -71,7 +72,7 @@ struct AccountSettingsView: View {
         Section("已登录账号") {
             ForEach(session.accounts) { account in
                 HStack {
-                    Label(account.id, systemImage: "person.crop.circle")
+                    Label(account.displayName, systemImage: "person.crop.circle")
                     Spacer()
                     Button("移除", role: .destructive) { pendingRemoval = account.id }
                         .buttonStyle(.borderless)
@@ -101,5 +102,18 @@ struct AccountSettingsView: View {
     }
     private func perform(_ action: () throws -> Void) {
         do { try action() } catch { errorMessage = error.localizedDescription }
+    }
+    private func refreshAccountNames() async {
+        let auth = BiliAuthService()
+        for account in session.accounts {
+            guard !Task.isCancelled else { return }
+            do {
+                let name = try await auth.fetchAccountName(account)
+                try Task.checkCancellation()
+                try session.updateUsername(name, for: account)
+            } catch {
+                // Keep cached names (or the UID fallback) when offline or expired.
+            }
+        }
     }
 }

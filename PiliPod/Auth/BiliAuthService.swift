@@ -204,7 +204,12 @@ public class BiliAuthService {
     }
 
     func validateCookie(_ text: String) async throws -> BiliAccount {
-        let account = try Self.parseCookie(text)
+        var account = try Self.parseCookie(text)
+        account.username = try await fetchAccountName(account)
+        return account
+    }
+
+    func fetchAccountName(_ account: BiliAccount) async throws -> String {
         var request = URLRequest(url: URL(string: "https://api.bilibili.com/x/web-interface/nav")!)
         AccountRequest.apply(account, to: &request)
         let json = try await authJSON(request)
@@ -213,7 +218,10 @@ public class BiliAuthService {
               let mid = payload["mid"] as? NSNumber, mid.stringValue == account.id else {
             throw authError("Cookie 已失效或 UID 不匹配")
         }
-        return account
+        guard let name = payload["uname"] as? String, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw authError("无法获取账号用户名")
+        }
+        return name
     }
 
     private func deviceParameters() -> [String: String] {

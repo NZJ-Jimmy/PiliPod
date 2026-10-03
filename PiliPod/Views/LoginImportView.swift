@@ -16,13 +16,13 @@ struct LoginImportView: View {
     @State private var importError: String?
     @State private var imported = false
 
-    init(title: String = "导入登录数据", onImported: @escaping () -> Void) {
+    init(title: String = "导入账号", onImported: @escaping () -> Void) {
         self.title = title
         self.onImported = onImported
     }
 
     var body: some View {
-        Button(title) {
+        Button(title, systemImage: "square.and.arrow.down") {
             showImporter = true
         }
         .alert("导入失败", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {

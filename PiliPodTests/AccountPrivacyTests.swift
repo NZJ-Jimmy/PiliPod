@@ -18,6 +18,35 @@ private final class MemoryAccountVault: AccountVault {
 
 @MainActor
 struct AccountPrivacyTests {
+    @Test func usernamesPersistWithoutChangingAssignmentsOrCredentials() throws {
+        let vault = MemoryAccountVault()
+        let session = LoginSession(vault: vault)
+        let original = account("1")
+        try session.add([original, account("2")])
+        let assignments = session.snapshot.assignments
+        try session.updateUsername(" 用户名 ", for: original)
+        let restored = LoginSession(vault: vault)
+        restored.restore()
+        #expect(restored.accounts.first { $0.id == "1" }?.displayName == "用户名（1）")
+        #expect(restored.snapshot.assignments == assignments)
+        #expect(restored.accounts.first { $0.id == "1" }?.accessKey == original.accessKey)
+        #expect(restored.accounts.first { $0.id == "2" }?.displayName == "2")
+    }
+
+    @Test func usernameResponseCannotUpdateRemovedOrReauthenticatedAccount() throws {
+        let session = LoginSession(vault: MemoryAccountVault())
+        let old = account("1")
+        try session.add([old])
+        try session.remove("1")
+        try session.updateUsername("旧用户名", for: old)
+        #expect(session.accounts.isEmpty)
+        let replacement = BiliAccount(cookies: BiliCookie(SESSDATA: "new-session", bili_jct: "new-csrf",
+            DedeUserID: "1", sid: nil, buvid3: nil), accessKey: nil, refresh: nil, type: nil)
+        try session.add([replacement])
+        try session.updateUsername("旧用户名", for: old)
+        #expect(session.accounts.first?.username == nil)
+    }
+
     private func account(_ id: String, type: [Int]? = nil) -> BiliAccount {
         BiliAccount(cookies: BiliCookie(SESSDATA: "session-\(id)", bili_jct: "csrf-\(id)",
             DedeUserID: id, sid: nil, buvid3: nil), accessKey: "token-\(id)", refresh: "refresh-\(id)", type: type)

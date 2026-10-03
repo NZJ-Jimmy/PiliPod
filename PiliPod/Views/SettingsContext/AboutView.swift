@@ -69,14 +69,14 @@ struct AboutView: View {
                 }
             }
 
-            Section("登录数据") {
-                Button("导入登录信息") {
+            Section("账号数据") {
+                Button("导入账号", systemImage: "square.and.arrow.down") {
                     activeImporter = .login
                     showImportSheet = true
                 }
                 .foregroundStyle(.primary)
 
-                Button("导出登录信息") {
+                Button("导出账号", systemImage: "square.and.arrow.up") {
                     prepareLoginExport()
                 }
                 .foregroundStyle(.primary)
@@ -128,7 +128,7 @@ struct AboutView: View {
         } message: {
             Text(exportErrorMessage ?? "未知错误")
         }
-        .alert("登录数据", isPresented: Binding(
+        .alert("账号数据", isPresented: Binding(
             get: { loginTransferMessage != nil },
             set: { if !$0 { loginTransferMessage = nil } }
         )) {
@@ -195,7 +195,7 @@ struct AboutView: View {
         case let (.login, .success(url)):
             do {
                 try LoginImportService.importFrom(url: url)
-                loginTransferMessage = "登录信息已导入。"
+                loginTransferMessage = "账号已导入。"
             } catch {
                 ErrorLogService.record(error, context: "导入登录信息")
                 loginTransferMessage = error.localizedDescription

@@ -150,9 +150,10 @@ struct LoginMethodTests {
         do { _ = try await auth.validateCookie("SESSDATA=fake; bili_jct=csrf; DedeUserID=123"); Issue.record("Expected UID mismatch") } catch {}
     }
     @Test func cookieValidationAcceptsMatchingUID() async throws {
-        let auth = service { _ in (200, ["code": 0, "data": ["isLogin": true, "mid": 123]]) }
+        let auth = service { _ in (200, ["code": 0, "data": ["isLogin": true, "mid": 123, "uname": "测试用户"]]) }
         let account = try await auth.validateCookie("SESSDATA=fake; bili_jct=csrf; DedeUserID=123")
         #expect(account.id == "123")
+        #expect(account.displayName == "测试用户（123）")
     }
     @Test func compatibleJSONPreservesCredentialsAndEmptyAssignments() throws {
         let cookies = ["SESSDATA": "fake-session", "bili_jct": "fake-csrf", "DedeUserID": "123",
