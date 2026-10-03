@@ -2218,18 +2218,15 @@ struct VideoActionBar: View {
         let pressID = UUID()
         activeTriplePressID = pressID
         isTripleTouching = true
-        hasTripleChargeStarted = false
+        hasTripleCompleted = false
+        hasTripleChargeStarted = true
+        isTripleCharging = true
+        withAnimation(.easeIn(duration: 1.4)) {
+            tripleChargeProgress = 1
+        }
+        tripleChargeHaptics.start()
         triplePressTask = Task { @MainActor in
-            guard await waitForTriplePress(milliseconds: 500) else { return }
-            guard isTripleTouching, activeTriplePressID == pressID else { return }
-
-            hasTripleChargeStarted = true
-            isTripleCharging = true
-            withAnimation(.easeIn(duration: 1.4)) {
-                tripleChargeProgress = 1
-            }
-            tripleChargeHaptics.start()
-
+            // UIKit already recognized a stationary 0.5-second long press.
             guard await waitForTriplePress(milliseconds: 1_400) else { return }
             guard isTripleTouching, activeTriplePressID == pressID else { return }
 
@@ -2268,7 +2265,6 @@ struct VideoActionBar: View {
             return
         }
 
-        let shouldHandleAsTap = !hasTripleChargeStarted
         let shouldRestore = hasTripleChargeStarted && !hasTripleCompleted
 
         isTripleTouching = false
@@ -2290,10 +2286,6 @@ struct VideoActionBar: View {
                 tripleCompletionScale = 1
             }
         }
-
-        if shouldHandleAsTap {
-            onToggleLike()
-        }
     }
 
     private func cancelTriplePress() {
@@ -2302,6 +2294,12 @@ struct VideoActionBar: View {
         triplePressTask?.cancel()
         triplePressTask = nil
         tripleChargeHaptics.stop()
+        isTripleCharging = false
+        isTripleCompletionAnimating = false
+        hasTripleChargeStarted = false
+        hasTripleCompleted = false
+        tripleChargeProgress = 0
+        tripleCompletionScale = 1
     }
 
     private func requestTripleLike() {
@@ -2379,17 +2377,15 @@ private struct VideoTripleLikeButton: View {
                 completionScale: completionScale
             )
         )
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !isDisabled else { return }
-                    onPressStarted()
-                }
-                .onEnded { _ in
-                    guard !isDisabled else { return }
-                    onPressEnded()
-                }
-        )
+        .onTapGesture {
+            guard !isDisabled else { return }
+            onTap()
+        }
+        .gesture(VideoTripleLikePressGesture(
+            isEnabled: !isDisabled,
+            onStarted: onPressStarted,
+            onFinished: onPressEnded
+        ))
         .opacity(isDisabled ? 0.6 : 1)
     }
 }
