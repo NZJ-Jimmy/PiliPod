@@ -24,23 +24,25 @@ struct LibraryFoldersView: View {
                 LazyVStack(spacing: 0) {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 16)], spacing: 20) {
                         ForEach(model.entries) { folder in
-                            if folder.isUnavailable || (subscriptions && folder.type != 11 && folder.type != 21) {
-                                folderCard(folder)
-                                    .opacity(0.5)
-                            } else {
-                                NavigationLink {
-                                    LibraryMediaView(folder: folder)
-                                } label: {
+                            Group {
+                                if folder.isUnavailable || (subscriptions && folder.type != 11 && folder.type != 21) {
                                     folderCard(folder)
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    if subscriptions {
-                                        Button("取消订阅", systemImage: "bookmark.slash", role: .destructive) {
-                                            pendingUnsubscribe = folder
-                                        }
-                                        .disabled(isUnsubscribing)
+                                        .opacity(0.5)
+                                } else {
+                                    NavigationLink {
+                                        LibraryMediaView(folder: folder)
+                                    } label: {
+                                        folderCard(folder)
                                     }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .contextMenu {
+                                if subscriptions, folder.type == 11 || folder.type == 21 {
+                                    Button("取消订阅", systemImage: "bookmark.slash", role: .destructive) {
+                                        pendingUnsubscribe = folder
+                                    }
+                                    .disabled(isUnsubscribing)
                                 }
                             }
                         }
@@ -265,7 +267,7 @@ private struct LibraryLoadingFooter: View {
                 ContentUnavailableView(emptyText, systemImage: "folder")
             } else if hasMore {
                 ProgressView()
-                    .task { await load() }
+                    .onAppear { Task { await load() } }
             } else {
                 Text("已经到底了").font(.caption).foregroundStyle(.secondary)
             }
