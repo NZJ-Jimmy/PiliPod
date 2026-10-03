@@ -522,7 +522,7 @@ struct VideoDetailPage: View {
                                     if usesLegacyVideoDetailTabs {
                                         tabContent(width: geo.size.width)
                                     } else {
-                                        introTabContent
+                                        introTabContent(commentSheetHeight: max(1, geo.size.height - nonFullscreenPlayerHeight(for: geo.size)))
                                     }
                                 }
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -1236,7 +1236,7 @@ struct VideoDetailPage: View {
             isSwipeEnabled: !isDraggingVideoPageStrip,
             leadingSwipeExclusionWidth: nonFullscreenBackSwipeReservedWidth,
             introContent: {
-                introTabContent
+                introTabContent()
             },
             commentsContent: {
                 VideoCommentsTabView(
@@ -1301,13 +1301,14 @@ struct VideoDetailPage: View {
         )
     }
 
-    private var introTabContent: some View {
+    private func introTabContent(commentSheetHeight: CGFloat = 1) -> some View {
         Group {
             if let model = introTabDisplayModel {
                 IntroTabContentView(
                     model: model,
                     showsCommentPreview: !usesLegacyVideoDetailTabs,
                     commentCount: viewModel.videoDetail?.stat.reply ?? 0,
+                    commentSheetHeight: commentSheetHeight,
                     namespace: namespace,
                     onOpenOwner: { mid, aid in
                         viewModel.prepareForNestedNavigation()

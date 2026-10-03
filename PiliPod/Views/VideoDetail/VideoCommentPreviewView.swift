@@ -3,6 +3,7 @@ import SwiftUI
 struct VideoCommentPreviewView: View {
     let aid: Int
     let commentCount: Int
+    let commentSheetHeight: CGFloat
     let onOpenUserSpace: (Int) -> Void
 
     private struct Preview: Identifiable {
@@ -19,11 +20,19 @@ struct VideoCommentPreviewView: View {
     @State private var isLoading = false
     @State private var errorText: String?
     @State private var showsComments = false
+    @State private var selectedCommentDetent: PresentationDetent = .large
+
+    private var videoVisibleDetent: PresentationDetent { .height(commentSheetHeight) }
+
+    private func openComments() {
+        selectedCommentDetent = videoVisibleDetent
+        showsComments = true
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                showsComments = true
+                openComments()
             } label: {
                 HStack {
                     Text("评论 (\(commentCount))")
@@ -54,7 +63,7 @@ struct VideoCommentPreviewView: View {
                 }
                 .font(.footnote)
             } else if previews.isEmpty {
-                Button("暂无评论，来说点什么吧") { showsComments = true }
+                Button("暂无评论，来说点什么吧") { openComments() }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 12)
@@ -63,7 +72,7 @@ struct VideoCommentPreviewView: View {
                     HStack(spacing: 12) {
                         ForEach(previews) { preview in
                             Button {
-                                showsComments = true
+                                openComments()
                             } label: {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(preview.username)
@@ -100,6 +109,9 @@ struct VideoCommentPreviewView: View {
             updated.commentSortOrder = order
             AudioVideoSettingsStore.save(updated)
         }
+        .onChange(of: commentSheetHeight) { _, _ in
+            if selectedCommentDetent != .large { selectedCommentDetent = videoVisibleDetent }
+        }
         .sheet(isPresented: $showsComments, onDismiss: {
             Task { await loadPreviews() }
         }) {
@@ -116,7 +128,9 @@ struct VideoCommentPreviewView: View {
                     }
                 }
             }
-            .presentationDetents([.large])
+            .presentationDetents([videoVisibleDetent, .large], selection: $selectedCommentDetent)
+            .presentationBackgroundInteraction(.enabled(upThrough: videoVisibleDetent))
+            .presentationContentInteraction(.scrolls)
             .presentationDragIndicator(.visible)
         }
     }
