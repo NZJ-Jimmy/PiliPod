@@ -22,10 +22,7 @@ struct BiliAccount: Codable, Identifiable {
     var type: [Int]?
     var id: String { cookies.DedeUserID }
     var cookieString: String {
-        var items = ["SESSDATA=\(cookies.SESSDATA)", "bili_jct=\(cookies.bili_jct)", "DedeUserID=\(id)"]
-        if let sid = cookies.sid { items.append("sid=\(sid)") }
-        if let buvid = cookies.buvid3 { items.append("buvid3=\(buvid)") }
-        return items.joined(separator: "; ")
+        cookies.dictionary.keys.sorted().map { "\($0)=\(cookies.dictionary[$0] ?? "")" }.joined(separator: "; ")
     }
 }
 

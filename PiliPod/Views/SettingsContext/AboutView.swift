@@ -176,27 +176,10 @@ struct AboutView: View {
     private func prepareLoginExport() {
         let state = loginSession.snapshot
         guard !state.accounts.isEmpty else { return }
-        let uid = "accounts"
-        var payload: [String: Any] = [:]
-        for account in state.accounts {
-            let c = account.cookies
-            let roles = AccountRole.allCases.enumerated().compactMap { index, role in
-                state.assignments[role] == account.id ? index : nil
-            }
-            payload[account.id] = [
-                "cookies": ["SESSDATA": c.SESSDATA, "bili_jct": c.bili_jct,
-                    "DedeUserID": c.DedeUserID, "sid": c.sid ?? "", "buvid3": c.buvid3 ?? ""],
-                "accessKey": account.accessKey ?? "", "refresh": account.refresh ?? "", "type": roles
-            ]
-        }
-
         do {
-            let data = try JSONSerialization.data(
-                withJSONObject: payload,
-                options: [.prettyPrinted, .sortedKeys]
-            )
+            let data = try LoginImportService.encode(state)
             exportDocument = JSONExportDocument(data: data)
-            exportFilename = "bili_login_\(uid).json"
+            exportFilename = "pilipod_account.json"
             showExportSheet = true
         } catch {
             ErrorLogService.record(error, context: "导出登录信息")

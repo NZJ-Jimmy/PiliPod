@@ -1,10 +1,13 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AccountSettingsView: View {
     @ObservedObject private var session = LoginSession.shared
     @State private var showLogin = false
     @State private var errorMessage: String?
     @State private var pendingRemoval: String?
+    @State private var exportDocument = JSONExportDocument(data: Data())
+    @State private var showExport = false
 
     var body: some View {
         List {
@@ -17,6 +20,10 @@ struct AccountSettingsView: View {
         }
         .navigationTitle("账号与隐私")
         .fullScreenCover(isPresented: $showLogin) { LoginPageView() }
+        .fileExporter(isPresented: $showExport, document: exportDocument,
+                      contentType: .json, defaultFilename: "pilipod_account.json") { result in
+            if case .failure(let error) = result { errorMessage = error.localizedDescription }
+        }
         .alert("操作失败", isPresented: errorPresented) {
             Button("确定") { errorMessage = nil }
         } message: {
@@ -72,6 +79,13 @@ struct AccountSettingsView: View {
             }
             Button("添加账号", systemImage: "person.badge.plus") { showLogin = true }
             LoginImportView(onImported: {})
+            Button("导出账号", systemImage: "square.and.arrow.up") {
+                perform {
+                    exportDocument = JSONExportDocument(data: try LoginImportService.encode(session.snapshot))
+                    showExport = true
+                }
+            }
+            .disabled(session.accounts.isEmpty)
         }
     }
     private var errorPresented: Binding<Bool> {
