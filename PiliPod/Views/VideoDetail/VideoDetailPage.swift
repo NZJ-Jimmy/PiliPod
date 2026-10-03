@@ -829,11 +829,12 @@ struct VideoDetailPage: View {
             configureAudioSessionHandlers()
 #endif
             await bindableViewModel.loadVideoData()
+            guard !Task.isCancelled else { return }
             refreshCachedIntroDescription()
             ensureSponsorSegmentsLoadedIfNeeded()
 #if canImport(UIKit)
-            audioSessionManager.activate()
             if let player = bindableViewModel.player {
+                audioSessionManager.activate()
                 Task { @MainActor in
                     await syncSystemMediaControlWhenPlaybackStarts(player: player)
                 }
@@ -1776,12 +1777,17 @@ struct VideoDetailPage: View {
 
     private func syncSystemMediaControlWhenPlaybackStarts(player: MPVKitPlayer) async {
         for _ in 0..<20 {
+            guard !Task.isCancelled, !isClosing else { return }
             let snapshot = player.uiSnapshot
             if snapshot.isPlaying {
                 syncSystemMediaControl(reason: "initial-playback-start")
                 return
             }
-            try? await Task.sleep(nanoseconds: 100000000)
+            do {
+                try await Task.sleep(nanoseconds: 100000000)
+            } catch {
+                return
+            }
         }
     }
 

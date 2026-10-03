@@ -89,6 +89,7 @@ struct LivePlaybackPage: View {
             startMediaControlSyncLoopIfNeeded()
 #endif
             await viewModel.loadPlaybackIfNeeded()
+            guard !Task.isCancelled else { return }
 #if canImport(UIKit)
             audioSessionManager.activate()
             syncSystemMediaControl()

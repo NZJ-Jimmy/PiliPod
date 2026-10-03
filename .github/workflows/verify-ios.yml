@@ -2,7 +2,7 @@ name: Verify iOS build
 
 on:
   push:
-    branches: ['codex/video-detail-back-gesture']
+    branches: ['codex/merge-three-branches']
   pull_request:
   workflow_dispatch:
 
@@ -17,7 +17,7 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.6'
-      - name: Test detail gestures on iOS Simulator
+      - name: Test accounts and detail gestures on iOS Simulator
         run: |
           SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
@@ -34,6 +34,7 @@ jobs:
             -scheme PiliPod \
             -configuration Debug \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -only-testing:PiliPodTests \
             -only-testing:PiliPodUITests/VideoDetailGestureUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath build/GestureTests.xcresult \
@@ -42,12 +43,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Video-detail-gesture-test-results
+          name: Merged-iOS-test-results
           path: build/GestureTests.xcresult
           retention-days: 14
 
   ipa:
-    if: github.ref == 'refs/heads/codex/video-detail-back-gesture'
+    needs: build
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,11 +72,11 @@ jobs:
           mkdir -p build/Payload
           cp -R build/PiliPod.xcarchive/Products/Applications/PiliPod.app build/Payload/
           cd build
-          zip -qr PiliPod-back-gesture.ipa Payload
+          zip -qr PiliPod-merged.ipa Payload
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: PiliPod-back-gesture-unsigned-IPA
-          path: build/PiliPod-back-gesture.ipa
+          name: PiliPod-merged-unsigned-IPA
+          path: build/PiliPod-merged.ipa
           retention-days: 14
           if-no-files-found: error

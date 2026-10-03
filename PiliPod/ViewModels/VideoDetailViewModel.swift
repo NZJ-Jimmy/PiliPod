@@ -122,13 +122,14 @@ class VideoDetailViewModel {
         self.title = title
         self.cover = cover
         self.requestedInitialSeekTime = initialSeekTime
-        self.player = MPVKitPlayer()
+        // SwiftUI can construct temporary State values while evaluating a
+        // destination. Create the playback session only once a stream is ready.
     }
 
     // MARK: - Load Video Data
 
     func loadVideoData() async {
-        guard videoDetail == nil, !isLoading else { return }
+        guard !Task.isCancelled, videoDetail == nil, !isLoading else { return }
         isLoading = true
         error = nil
         playerInfo = nil
@@ -367,6 +368,8 @@ class VideoDetailViewModel {
                     self.isPlayingOfflineCache = true
                     self.isLoading = false
 
+                    guard !Task.isCancelled else { return }
+                    if self.player == nil { self.player = MPVKitPlayer() }
                     if let player = self.player {
                         player.play(stream: cachedAsset.stream)
                         player.setPlaybackRate(self.selectedPlaybackRate)
@@ -408,6 +411,8 @@ class VideoDetailViewModel {
                     self.isPlayingOfflineCache = false
                     self.isLoading = false
 
+                    guard !Task.isCancelled else { return }
+                    if self.player == nil { self.player = MPVKitPlayer() }
                     if let player = self.player {
                         player.play(stream: self.dashStream!)
                         player.setPlaybackRate(self.selectedPlaybackRate)

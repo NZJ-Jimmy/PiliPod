@@ -11,6 +11,21 @@ import Testing
 
 struct PiliPodTests {
 
+    @MainActor
+    @Test func cancelledVideoDestinationDoesNotCreateAPlaybackSession() async {
+        let model = VideoDetailViewModel(bvid: "BV1test", title: "Test", cover: "")
+        #expect(model.player == nil)
+
+        // The main actor cannot start this task before we cancel it below.
+        let load = Task { @MainActor in await model.loadVideoData() }
+        load.cancel()
+        await load.value
+
+        #expect(model.player == nil)
+        #expect(!model.isLoading)
+        #expect(model.videoDetail == nil)
+    }
+
     @Test func manualCDNRewritePreservesMediaPathAndSignature() throws {
         let source = try #require(URL(string: "https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/12/34/56/video.m4s?deadline=123&sign=abc%2Fdef"))
 
