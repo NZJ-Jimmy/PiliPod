@@ -159,7 +159,6 @@ struct VideoDetailPage: View {
     @State private var isDanmakuListPresented = false
     @State private var selectedSubtitleID: String?
     @State private var danmakuListBlockLevel = DanmakuConfigStore.load().blockLevel
-    @Namespace private var danmakuActionGlass
     @State private var isFullscreen = false
     @State private var fullscreenTrigger: FullscreenTrigger = .none
     @State private var selectedTab: VideoDetailTab = .intro
@@ -385,6 +384,10 @@ struct VideoDetailPage: View {
                             },
                             currentVideoDurationFallback: resolvedVideoDuration,
                             onBack: { handleBackAction() },
+                            onShowDanmakuList: {
+                                danmakuListBlockLevel = danmakuConfig.blockLevel
+                                isDanmakuListPresented = true
+                            },
                             onShowDanmakuSettingsSheet: {
                                 isDanmakuSettingsPresented = true
                             },
@@ -1160,45 +1163,6 @@ struct VideoDetailPage: View {
                 .buttonStyle(.plain)
             }
             Spacer()
-
-            GlassEffectContainer {
-                HStack(spacing: 8) {
-                    if isDanmakuEnabled {
-                        Button {
-                            danmakuListBlockLevel = danmakuConfig.blockLevel
-                            isDanmakuListPresented = true
-                        } label: {
-                            Image(systemName: "list.bullet.indent")
-                                .font(.system(size: 16, weight: .medium))
-                                .frame(width: 32, height: 32)
-                        }
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .glassEffectID("VideoDetailDanmakuList", in: danmakuActionGlass)
-                        .glassEffectTransition(.matchedGeometry)
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("弹幕列表")
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
-
-                    Button {
-                        isDanmakuEnabled.toggle()
-                    } label: {
-                        Image(isDanmakuEnabled ? "DanmakuOn" : "DanmakuOff")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 16, height: 16)
-                            .foregroundStyle(.primary)
-                            .frame(width: 32, height: 32)
-                    }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .glassEffectID("VideoDetailDanmakuToggle", in: danmakuActionGlass)
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("弹幕")
-                    .accessibilityValue(isDanmakuEnabled ? "已开启" : "已关闭")
-                }
-            }
-            .animation(.spring(response: 0.42, dampingFraction: 0.8), value: isDanmakuEnabled)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -3282,6 +3246,7 @@ private struct MoreActionsMenuView: View, Equatable {
     let onReloadVideo: () -> Void
     let onStartPictureInPicture: () -> Void
     let onShowVideoStreamInfo: () -> Void
+    let onShowDanmakuList: () -> Void
 
     static func == (lhs: MoreActionsMenuView, rhs: MoreActionsMenuView) -> Bool {
         true
@@ -3290,6 +3255,14 @@ private struct MoreActionsMenuView: View, Equatable {
     var body: some View {
         // 保持菜单结构静态，避免父视图因 currentTime 高频更新时重建系统 Menu。
         Menu {
+            Button {
+                onUserInteracted()
+                onShowDanmakuList()
+            } label: {
+                Image(systemName: "list.bullet.indent")
+                Text("弹幕列表")
+            }
+
             Button {
                 onUserInteracted()
                 onStartPictureInPicture()
@@ -3417,6 +3390,7 @@ struct PlayerControlsOverlay: View {
     let onReloadVideo: () -> Void
     let onStartPictureInPicture: () -> Void
     let onShowVideoStreamInfo: () -> Void
+    let onShowDanmakuList: () -> Void
     let onSelectQuality: (Int) -> Void
     let onSelectPlaybackRate: (Double) -> Void
     let onSeekPreviewChanged: (TimeInterval?) -> Void
@@ -3526,6 +3500,13 @@ struct PlayerControlsOverlay: View {
                         in: .circle
                     )
 
+                    actionCircleButton(imageName: danmakuEnabled ? "DanmakuOn" : "DanmakuOff") {
+                        onUserInteracted()
+                        danmakuEnabled.toggle()
+                    }
+                    .accessibilityLabel("弹幕")
+                    .accessibilityValue(danmakuEnabled ? "已开启" : "已关闭")
+
                     // 右上角弹幕设置按钮
                     Button(action: {
                         onUserInteracted()
@@ -3552,7 +3533,8 @@ struct PlayerControlsOverlay: View {
                     onCacheVideo: onCacheVideo,
                     onReloadVideo: onReloadVideo,
                     onStartPictureInPicture: onStartPictureInPicture,
-                    onShowVideoStreamInfo: onShowVideoStreamInfo
+                    onShowVideoStreamInfo: onShowVideoStreamInfo,
+                    onShowDanmakuList: onShowDanmakuList
                 )
                 .equatable()
             }
