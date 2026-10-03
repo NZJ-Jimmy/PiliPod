@@ -235,6 +235,8 @@ struct AudioVideoSettings: Codable, Equatable {
     var highDynamicRangeEnabled = true
     var prefersEDROutput = true
     var hdrToneMapping: HDRToneMappingOption = .auto
+    var commentPreviewLineCount = 2
+    var commentSortOrder: VideoCommentSortOrder = .hot
     var usesLegacyVideoDetailTabs = false
     var videoProgressBarStyle: VideoProgressBarStyle = .system
 
@@ -265,6 +267,8 @@ struct AudioVideoSettings: Codable, Equatable {
         case highDynamicRangeEnabled
         case prefersEDROutput
         case hdrToneMapping
+        case commentPreviewLineCount
+        case commentSortOrder
         case usesLegacyVideoDetailTabs
         case videoProgressBarStyle
     }
@@ -274,6 +278,7 @@ struct AudioVideoSettings: Codable, Equatable {
         if !Self.supportedHistoryReportIntervals.contains(settings.historyReportInterval) {
             settings.historyReportInterval = 10
         }
+        settings.commentPreviewLineCount = min(max(settings.commentPreviewLineCount, 1), 6)
         settings.autosync = min(max(settings.autosync, 0), 10000)
         if settings.highDynamicRangeEnabled {
             settings.prefersEDROutput = true
@@ -314,6 +319,8 @@ struct AudioVideoSettings: Codable, Equatable {
         highDynamicRangeEnabled = try container.decodeIfPresent(Bool.self, forKey: .highDynamicRangeEnabled) ?? true
         prefersEDROutput = try container.decodeIfPresent(Bool.self, forKey: .prefersEDROutput) ?? true
         hdrToneMapping = try container.decodeIfPresent(HDRToneMappingOption.self, forKey: .hdrToneMapping) ?? .auto
+        commentPreviewLineCount = min(max(try container.decodeIfPresent(Int.self, forKey: .commentPreviewLineCount) ?? 2, 1), 6)
+        commentSortOrder = (try? container.decode(VideoCommentSortOrder.self, forKey: .commentSortOrder)) ?? .hot
         usesLegacyVideoDetailTabs = try container.decodeIfPresent(Bool.self, forKey: .usesLegacyVideoDetailTabs) ?? false
         videoProgressBarStyle = try container.decodeIfPresent(VideoProgressBarStyle.self, forKey: .videoProgressBarStyle) ?? .system
     }
@@ -369,5 +376,25 @@ final class NetworkTypeMonitor {
             self?.isCellularConnection = path.usesInterfaceType(.cellular)
         }
         monitor.start(queue: queue)
+    }
+}
+
+
+enum VideoCommentSortOrder: String, Codable, CaseIterable, Hashable {
+    case hot
+    case time
+
+    var title: String {
+        switch self {
+        case .hot: "按热度"
+        case .time: "按时间"
+        }
+    }
+
+    var apiMode: Bilibili_Main_Community_Reply_V1_Mode {
+        switch self {
+        case .hot: .mainListHot
+        case .time: .mainListTime
+        }
     }
 }

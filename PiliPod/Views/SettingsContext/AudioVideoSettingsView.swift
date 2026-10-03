@@ -39,6 +39,15 @@ private struct AudioVideoSettingsView: View {
             Section {
                 Toggle("使用简介 / 评论双 Tab 布局", isOn: $settings.usesLegacyVideoDetailTabs)
                     .tint(Color("BiliPink"))
+                if !settings.usesLegacyVideoDetailTabs {
+                    Stepper("评论预览高度：\(settings.commentPreviewLineCount) 行",
+                            value: $settings.commentPreviewLineCount, in: 1...6)
+                }
+                Picker("评论排序", selection: $settings.commentSortOrder) {
+                    ForEach(VideoCommentSortOrder.allCases, id: \.self) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
             } header: {
                 Text("视频详情页")
             } footer: {

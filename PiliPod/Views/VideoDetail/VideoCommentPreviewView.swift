@@ -12,7 +12,10 @@ struct VideoCommentPreviewView: View {
         let likes: Int64
     }
 
+    @State private var settings = AudioVideoSettingsStore.load()
+    @ScaledMetric(relativeTo: .subheadline) private var bodyLineHeight: CGFloat = 20
     @State private var previews: [Preview] = []
+    @State private var requestID = UUID()
     @State private var isLoading = false
     @State private var errorText: String?
     @State private var showsComments = false
@@ -33,6 +36,13 @@ struct VideoCommentPreviewView: View {
             }
             .buttonStyle(.plain)
             .tint(Color("BiliPink"))
+
+            Picker("评论排序", selection: $settings.commentSortOrder) {
+                ForEach(VideoCommentSortOrder.allCases, id: \.self) { order in
+                    Text(order.title).tag(order)
+                }
+            }
+            .pickerStyle(.segmented)
 
             if isLoading {
                 ProgressView("评论加载中…")
@@ -55,21 +65,22 @@ struct VideoCommentPreviewView: View {
                             Button {
                                 showsComments = true
                             } label: {
-                                VStack(alignment: .leading, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 8) {
                                     Text(preview.username)
                                         .font(.subheadline.weight(.semibold))
                                         .lineLimit(1)
                                     Text(preview.content)
                                         .font(.subheadline)
-                                        .lineLimit(4)
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                        .lineLimit(settings.commentPreviewLineCount)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .frame(height: bodyLineHeight * CGFloat(settings.commentPreviewLineCount), alignment: .topLeading)
                                     Label("\(preview.likes)", systemImage: "hand.thumbsup")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 .foregroundStyle(.primary)
                                 .padding(16)
-                                .frame(width: 280, height: 180, alignment: .topLeading)
+                                .frame(width: 280, alignment: .topLeading)
                                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
                             }
                             .buttonStyle(.plain)
@@ -79,7 +90,16 @@ struct VideoCommentPreviewView: View {
                 }
             }
         }
-        .task(id: aid) { await loadPreviews() }
+        .task(id: "\(aid)-\(settings.commentSortOrder.rawValue)") { await loadPreviews() }
+        .onReceive(NotificationCenter.default.publisher(for: .audioVideoSettingsDidChange)) { notification in
+            if let updated = notification.object as? AudioVideoSettings { settings = updated }
+        }
+        .onChange(of: settings.commentSortOrder) { _, order in
+            var updated = AudioVideoSettingsStore.load()
+            guard updated.commentSortOrder != order else { return }
+            updated.commentSortOrder = order
+            AudioVideoSettingsStore.save(updated)
+        }
         .sheet(isPresented: $showsComments, onDismiss: {
             Task { await loadPreviews() }
         }) {
@@ -104,14 +124,18 @@ struct VideoCommentPreviewView: View {
     @MainActor
     private func loadPreviews() async {
         guard aid > 0 else { return }
+        let currentRequestID = UUID()
+        requestID = currentRequestID
         let requestedAid = aid
+        let requestedOrder = settings.commentSortOrder
         isLoading = true
         errorText = nil
         previews = []
-        defer { isLoading = false }
+        defer { if requestID == currentRequestID { isLoading = false } }
         do {
-            let response = try await BiliAPI.shared.fetchVideoCommentMainList(oid: Int64(requestedAid), type: 1)
+            let response = try await BiliAPI.shared.fetchVideoCommentMainList(oid: Int64(requestedAid), type: 1, mode: requestedOrder.apiMode)
             try Task.checkCancellation()
+            guard requestID == currentRequestID, settings.commentSortOrder == requestedOrder else { return }
             previews = response.replies.prefix(3).map {
                 Preview(id: $0.id, username: $0.member.name.isEmpty ? "匿名用户" : $0.member.name,
                         content: $0.content.message, likes: $0.like)
@@ -119,6 +143,7 @@ struct VideoCommentPreviewView: View {
         } catch is CancellationError {
             return
         } catch {
+            guard requestID == currentRequestID else { return }
             errorText = error.localizedDescription
             ErrorLogService.record(error, context: "加载评论预览")
         }
