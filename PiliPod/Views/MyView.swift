@@ -14,10 +14,13 @@ struct MyView: View {
     @State private var showHistory = false
     @State private var showWatchLater = false
     @State private var showOfflineCache = false
+    @State private var showSubscriptions = false
+    @State private var showFavorites = false
     @State private var followingRoute: MyFollowingRoute?
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 20) {
                 // 顶部按钮
                 HStack {
@@ -41,7 +44,27 @@ struct MyView: View {
                 quickActionRow
                     .padding(.horizontal, 30)
 
+                Button {
+                    showFavorites = true
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(Color("BiliPink"))
+                        Text("我的收藏").font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    .padding(18)
+                    .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("我的收藏")
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18))
+                .padding(.horizontal, 30)
+
                 Spacer()
+            }
             }
             .task {
                 await viewModel.loadUser()
@@ -66,6 +89,12 @@ struct MyView: View {
             }
             .navigationDestination(isPresented: $showWatchLater) {
                 WatchLaterView()
+            }
+            .navigationDestination(isPresented: $showSubscriptions) {
+                LibraryFoldersView(subscriptions: true)
+            }
+            .navigationDestination(isPresented: $showFavorites) {
+                LibraryFoldersView(subscriptions: false)
             }
             .navigationDestination(item: $followingRoute) { route in
                 FollowingListView(mid: route.mid)
@@ -197,6 +226,12 @@ struct MyView: View {
             )
 
             quickActionButton(
+                title: "我的订阅",
+                systemImage: "rectangle.stack.badge.person.crop",
+                action: { showSubscriptions = true }
+            )
+
+            quickActionButton(
                 title: L10n.string("稍后再看"),
                 systemImage: "clock.badge",
                 action: { showWatchLater = true }
@@ -270,6 +305,7 @@ struct MyView: View {
             .frame(height: 72)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(title)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
