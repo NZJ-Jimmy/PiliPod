@@ -20,11 +20,13 @@ struct VideoCommentPreviewView: View {
     @State private var isLoading = false
     @State private var errorText: String?
     @State private var showsComments = false
+    @State private var selectedCommentRpid: Int?
     @State private var selectedCommentDetent: PresentationDetent = .large
 
     private var videoVisibleDetent: PresentationDetent { .height(commentSheetHeight) }
 
-    private func openComments() {
+    private func openComments(rpid: Int? = nil) {
+        selectedCommentRpid = rpid
         selectedCommentDetent = videoVisibleDetent
         showsComments = true
     }
@@ -72,7 +74,7 @@ struct VideoCommentPreviewView: View {
                     HStack(spacing: 12) {
                         ForEach(previews) { preview in
                             Button {
-                                openComments()
+                                openComments(rpid: Int(preview.id))
                             } label: {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(preview.username)
@@ -115,19 +117,15 @@ struct VideoCommentPreviewView: View {
         .sheet(isPresented: $showsComments, onDismiss: {
             Task { await loadPreviews() }
         }) {
-            NavigationStack {
-                VideoCommentsTabView(aid: aid, onOpenUserSpace: { mid in
+            VideoCommentsTabView(
+                aid: aid,
+                initialCommentRpid: selectedCommentRpid,
+                onClose: { showsComments = false },
+                onOpenUserSpace: { mid in
                     showsComments = false
                     onOpenUserSpace(mid)
-                })
-                .navigationTitle("评论")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") { showsComments = false }
-                    }
                 }
-            }
+            )
             .presentationDetents([videoVisibleDetent, .large], selection: $selectedCommentDetent)
             .presentationBackgroundInteraction(.enabled(upThrough: videoVisibleDetent))
             .presentationContentInteraction(.scrolls)
