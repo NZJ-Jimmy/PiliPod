@@ -16,12 +16,15 @@ enum LoginImportService {
                 accessKey: user["accessKey"] as? String, refresh: user["refresh"] as? String, type: user["type"] as? [Int])
         }
     }
+    @MainActor
     static func importFrom(url: URL) throws {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         try LoginSession.shared.add(decode(Data(contentsOf: url)))
     }
+    @MainActor
     static func restore() { LoginSession.shared.restore() }
+    @MainActor
     static func clearLoginState() throws {
         let id = LoginSession.shared.selectedID(for: .main)
         if id != "0" { try LoginSession.shared.remove(id) }

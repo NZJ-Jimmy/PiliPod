@@ -98,6 +98,7 @@ class VideoDetailViewModel {
     private var historyReportTimer: Timer?
     private var historyReportStartTask: Task<Void, Never>?
     private var videoShotWarmTask: Task<Void, Never>?
+    private var lastReportedAccountID: String?
     private var lastReportedProgress = 0
     private var playerRebuildToken = UUID()
     private var isRebuildingPlayer = false
@@ -228,8 +229,17 @@ class VideoDetailViewModel {
                         cid: detail.cid
                     )
                     let playerInfoData = playerInfoResponse.data
-                    let lastPlayCID = playerInfoData?.lastPlayCid
-                    let lastPlayTimeMilliseconds = playerInfoData?.lastPlayTime
+                    let session = LoginSession.shared
+                    var historyInfo = playerInfoData
+                    if !session.incognito, session.account(for: .history) != nil,
+                       session.selectedID(for: .history) != session.selectedID(for: .playback) {
+                        historyInfo = try? await BiliAPI.shared.fetchPlayerWbiV2(
+                            bvid: bvid, cid: detail.cid, role: .history
+                        ).data
+                    }
+                    let useHistory = !session.incognito && session.account(for: .history) != nil
+                    let lastPlayCID = useHistory ? historyInfo?.lastPlayCid : nil
+                    let lastPlayTimeMilliseconds = useHistory ? historyInfo?.lastPlayTime : nil
                     let resolvedInitialSeekTime: Double?
                     if let lastPlayTimeMilliseconds, lastPlayTimeMilliseconds > 0 {
                         let rawTime = Double(lastPlayTimeMilliseconds)
@@ -1336,7 +1346,7 @@ class VideoDetailViewModel {
     // MARK: - History Report
 
 	    func startHistoryReporting() {
-        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
+        guard !isPlayingOfflineCache else { return }
         historyReportStartTask?.cancel()
         historyReportTimer?.invalidate()
         historyReportTimer = nil
@@ -1362,7 +1372,9 @@ class VideoDetailViewModel {
         let currentProgress = Int(player.currentTime)
 
         // 如果进度有改变，才上报
-        if currentProgress != lastReportedProgress {
+        let accountID = LoginSession.shared.selectedID(for: .history)
+        if currentProgress != lastReportedProgress || lastReportedAccountID != accountID {
+            lastReportedAccountID = accountID
             lastReportedProgress = currentProgress
 
             Task {

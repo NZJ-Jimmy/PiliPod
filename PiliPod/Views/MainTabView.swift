@@ -50,6 +50,9 @@ struct MainTabView: View {
             await homeViewModel.loadUserIfNeeded()
             await homeViewModel.loadUnreadMessageCount(force: true)
         }
+        .task(id: loginSession.selectedID(for: .recommendation)) {
+            await homeViewModel.reloadForAccountChange()
+        }
         .task(id: homeViewModel.userFace) {
             guard let face = homeViewModel.userFace,
                   let url = URL(string: face),
@@ -60,16 +63,7 @@ struct MainTabView: View {
             }
             profileTabAvatar = tabBarAvatar(from: image)
         }
-        .onReceive(loginSession.$isLogin) { isLogin in
-            if isLogin {
-                Task {
-                    await homeViewModel.loadUserIfNeeded()
-                }
-            } else {
-                homeViewModel.userFace = nil
-                profileTabAvatar = nil
-            }
-        }
+
         .onChange(of: selectedTab) { newTab in
             guard newTab == .home else { return }
             Task {

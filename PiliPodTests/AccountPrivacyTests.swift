@@ -12,6 +12,7 @@ private final class MemoryAccountVault: AccountVault {
     }
 }
 
+@MainActor
 struct AccountPrivacyTests {
     private func account(_ id: String, type: [Int]? = nil) -> BiliAccount {
         BiliAccount(cookies: BiliCookie(SESSDATA: "session-\(id)", bili_jct: "csrf-\(id)",
@@ -121,4 +122,41 @@ struct AccountPrivacyTests {
         #expect(captured.cookieString.contains("session-1"))
         #expect(captured.accessKey == "token-1")
     }
+    @Test func historyRequestUsesHistoryCSRFAndNeverExistsInIncognito() throws {
+        var state = AccountState()
+        state.add(account("1"), activate: true)
+        state.add(account("2"), activate: true)
+        let request = try #require(AccountRequest.historyRequest(state: state, aid: 3, cid: 4, progress: 5))
+        #expect(request.value(forHTTPHeaderField: "Cookie")?.contains("session-1") == true)
+        #expect(request.url?.query?.contains("csrf=csrf-1") == true)
+        #expect(request.httpMethod == "POST")
+        state.incognito = true
+        #expect(AccountRequest.historyRequest(state: state, aid: 3, cid: 4, progress: 5) == nil)
+        state.incognito = false
+        state.assignments[.history] = "0"
+        #expect(AccountRequest.historyRequest(state: state, aid: 3, cid: 4, progress: 5) == nil)
+    }
+    @Test func signedAppRequestsKeepTokenAndCookieFromTheSameAccount() throws {
+        let api = BiliAPI.shared
+        let request = try #require(api.makeAppRequest(account: account("2"),
+            baseURLString: "https://app.bilibili.com/x/v2/feed/index"))
+        #expect(request.url?.query?.contains("access_key=token-2") == true)
+        #expect(request.value(forHTTPHeaderField: "Cookie")?.contains("session-2") == true)
+        let anonymous = try #require(api.makeAppRequest(account: nil,
+            baseURLString: "https://app.bilibili.com/x/v2/feed/index", parameters: ["access_key": "stale-token"]))
+        #expect(anonymous.url?.query?.contains("access_key") == false)
+        #expect(anonymous.value(forHTTPHeaderField: "Cookie") == nil)
+        #expect(!anonymous.httpShouldHandleCookies)
+    }
+    @Test func incognitoSearchDoesNotPersistOrEraseExistingHistory() throws {
+        let suite = "PiliPod.Tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let existing = SearchHistoryStore.record("old", in: [], incognito: false, defaults: defaults)
+        let result = SearchHistoryStore.record("private", in: existing, incognito: true, defaults: defaults)
+        #expect(result == ["old"])
+        #expect(defaults.stringArray(forKey: "PiliPod.searchHistory") == ["old"])
+        #expect(SearchHistoryStore.record("new", in: result, incognito: false, defaults: defaults) == ["new", "old"])
+    }
+
 }

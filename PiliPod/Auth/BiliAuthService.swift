@@ -79,6 +79,7 @@ public class BiliAuthService {
     public init() {}
 
     @discardableResult
+    @MainActor
     public func persistLogin(data: [String: Any]) -> Bool {
         let accessToken = (data["access_token"] as? String)
             ?? ((data["token_info"] as? [String: Any])?["access_token"] as? String)
@@ -489,7 +490,6 @@ public class BiliAuthService {
         request.setValue("android_hd", forHTTPHeaderField: "app-key")
         request.setValue(makeTraceId(), forHTTPHeaderField: "x-bili-trace-id")
         request.setValue("cronet", forHTTPHeaderField: "bili-http-engine")
-        print(makeOrderedBodyString(from: params))
         request.httpBody = makeOrderedBodyString(from: params).data(using: .utf8)
 
         do {
@@ -497,8 +497,6 @@ public class BiliAuthService {
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return .failed(code: -2004, message: "access_token 解析失败")
             }
-            print(String(data: data, encoding: .utf8))
-            print(json)
             let retCode = json["code"] as? Int ?? -2004
             let msg = json["message"] as? String ?? "未知错误"
             if retCode == 0 {

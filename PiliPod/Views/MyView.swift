@@ -53,15 +53,7 @@ struct MyView: View {
             .fullScreenCover(isPresented: $showLoginSheet) {
                 LoginPageView()
             }
-            .onReceive(loginSession.$isLogin) { isLogin in
-                if isLogin {
-                    Task {
-                        await viewModel.loadUser()
-                    }
-                } else {
-                    viewModel.user = nil
-                }
-            }
+
             .navigationDestination(isPresented: $showHistory) {
                 HistoryView()
             }

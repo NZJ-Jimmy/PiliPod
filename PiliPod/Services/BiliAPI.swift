@@ -59,11 +59,6 @@ class BiliAPI {
         )
         request.setValue("https://www.bilibili.com", forHTTPHeaderField: "Referer")
 
-        // cookie登录状态
-        let cookie = account?.cookieString ?? ""
-        if !cookie.isEmpty {
-            request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
 
         var components = URLComponents()
         components.queryItems = parameters.map {
@@ -75,7 +70,7 @@ class BiliAPI {
 
     // MARK: - 构建移动端 App 请求（加签 + 公共参数）
 
-    private func makeAppRequest(
+    func makeAppRequest(
         account: BiliAccount? = LoginSession.shared.account(for: .main),
         baseURLString: String,
         method: String = "GET",
@@ -85,6 +80,7 @@ class BiliAPI {
 
         // 合并业务参数与系统公共移动端参数
         var allParams = parameters
+        allParams.removeValue(forKey: "access_key")
         allParams["appkey"] = BiliAPI.appKey
         allParams["mobi_app"] = "android_hd"
         allParams["platform"] = "android"
@@ -1080,7 +1076,6 @@ class BiliAPI {
         request.setValue("", forHTTPHeaderField: "x-bili-aurora-zone")
         request.setValue("cronet", forHTTPHeaderField: "bili-http-engine")
 
-        print(request.url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -1434,7 +1429,6 @@ class BiliAPI {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        print(String(data: data, encoding: .utf8))
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200 ... 299).contains(httpResponse.statusCode)
@@ -2517,9 +2511,10 @@ class BiliAPI {
 
     func fetchPlayerWbiV2(
         bvid: String,
-        cid: Int
+        cid: Int,
+        role: AccountRole = .playback
     ) async throws -> PlayerWbiV2Response {
-        let account = LoginSession.shared.account(for: .playback)
+        let account = LoginSession.shared.account(for: role)
         var components = URLComponents(
             string: "https://api.bilibili.com/x/player/wbi/v2"
         )
@@ -2657,26 +2652,9 @@ class BiliAPI {
         cid: Int,
         progress: Int
     ) async throws {
-        let state = LoginSession.shared.snapshot
-        guard state.shouldReportHistory else { return }
-        let account = state.account(for: .history)
-        var components = URLComponents(
-            string: "https://api.bilibili.com/x/v2/history/report"
-        )
-        components?.queryItems = [
-            URLQueryItem(name: "aid", value: String(aid)),
-            URLQueryItem(name: "cid", value: String(cid)),
-            URLQueryItem(name: "progress", value: String(progress)),
-            URLQueryItem(name: "platform", value: "web"),
-            URLQueryItem(name: "csrf", value: account?.cookies.bili_jct ?? "")
-        ]
-
-        guard let url = components?.url else {
-            throw APIError.invalidURL
-        }
-
-        var request = makeRequest(account: account, url: url)
-        request.httpMethod = "POST"
+        guard let request = AccountRequest.historyRequest(
+            state: LoginSession.shared.snapshot, aid: aid, cid: cid, progress: progress
+        ) else { return }
 
         let (_, response) = try await URLSession.shared.data(for: request)
 

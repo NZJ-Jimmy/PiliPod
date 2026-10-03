@@ -66,9 +66,6 @@ final class LoginViewModel: ObservableObject {
 
         case .needGeetest(let recaptchaToken, let gt, let challenge):
             print("触发人机验证风控！")
-            print("recaptchaToken: \(recaptchaToken)")
-            print("gt: \(gt)")
-            print("challenge: \(challenge)")
             geetestContext = GeetestContext(
                 recaptchaToken: recaptchaToken,
                 gt: gt,

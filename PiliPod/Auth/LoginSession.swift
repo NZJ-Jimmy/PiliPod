@@ -117,6 +117,7 @@ final class LoginSession: ObservableObject {
     func account(for role: AccountRole) -> BiliAccount? { snapshot.account(for: role) }
     func selectedID(for role: AccountRole) -> String { snapshot.assignments[role] ?? "0" }
     // Save before publishing; failed writes leave the working session intact.
+    @MainActor
     private func update(_ mutation: (inout AccountState) throws -> Void) throws {
         lock.lock()
         defer { lock.unlock() }
@@ -128,6 +129,7 @@ final class LoginSession: ObservableObject {
         isLogin = next.account(for: .main) != nil
         revision += 1
     }
+    @MainActor
     func add(_ accounts: [BiliAccount], activate: Bool = true) throws {
         guard !accounts.isEmpty, accounts.allSatisfy({
             UInt64($0.id).map { $0 > 0 } == true && !$0.cookies.SESSDATA.isEmpty && !$0.cookies.bili_jct.isEmpty
@@ -141,14 +143,18 @@ final class LoginSession: ObservableObject {
             }
         }
     }
+    @MainActor
     func assign(_ id: String, to role: AccountRole? = nil) throws {
         try update { state in
             guard id == "0" || state.accounts.contains(where: { $0.id == id }) else { throw AccountStorageError.invalidAccount }
             for target in role.map({ [$0] }) ?? AccountRole.allCases { state.assignments[target] = id }
         }
     }
+    @MainActor
     func remove(_ id: String) throws { try update { $0.remove(id) } }
+    @MainActor
     func setIncognito(_ enabled: Bool) throws { try update { $0.incognito = enabled } }
+    @MainActor
     func restore(defaults: UserDefaults = .standard) {
         do {
             if let data = try vault.load() {
@@ -162,16 +168,32 @@ final class LoginSession: ObservableObject {
             } else if let data = defaults.data(forKey: "bili_cookie") {
                 let cookie = try JSONDecoder().decode(BiliCookie.self, from: data)
                 try add([BiliAccount(cookies: cookie, accessKey: defaults.string(forKey: "bili_accessKey"),
-                    refresh: defaults.string(forKey: "bili_refresh"), type: defaults.array(forKey: "bili_type") as? [Int])])
+                    refresh: defaults.string(forKey: "bili_refresh"), type: nil)])
                 clearLegacy(defaults)
             }
         } catch { storageError = error.localizedDescription }
     }
+    @MainActor
     private func clearLegacy(_ defaults: UserDefaults) {
         for key in ["bili_cookie", "bili_accessKey", "bili_refresh", "bili_type"] { defaults.removeObject(forKey: key) }
     }
 }
 enum AccountRequest {
+    static func historyRequest(state: AccountState, aid: Int, cid: Int, progress: Int) -> URLRequest? {
+        guard state.shouldReportHistory, let account = state.account(for: .history) else { return nil }
+        var components = URLComponents(string: "https://api.bilibili.com/x/v2/history/report")
+        components?.queryItems = [
+            URLQueryItem(name: "aid", value: String(aid)), URLQueryItem(name: "cid", value: String(cid)),
+            URLQueryItem(name: "progress", value: String(progress)), URLQueryItem(name: "platform", value: "web"),
+            URLQueryItem(name: "csrf", value: account.cookies.bili_jct)
+        ]
+        guard let url = components?.url else { return nil }
+        var request = URLRequest(url: url)
+        apply(account, to: &request)
+        request.httpMethod = "POST"
+        return request
+    }
+
     static func apply(_ account: BiliAccount?, to request: inout URLRequest) {
         request.httpShouldHandleCookies = false
         request.cachePolicy = .reloadIgnoringLocalCacheData
