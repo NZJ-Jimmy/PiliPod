@@ -237,6 +237,58 @@ class BiliAPI {
         return decoded.data?.messages.map(\.protobufMessage) ?? []
     }
 
+    func sendPrivateMessage(talkerID: UInt64, text: String) async throws -> PrivateMessageSendResult {
+        guard LoginSession.shared.isLogin,
+              let senderID = UInt64(LoginSession.shared.cookies?.DedeUserID ?? ""), senderID > 0 else {
+            throw APIError.businessError(code: -101, message: "请先登录")
+        }
+        guard talkerID > 0, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw APIError.businessError(code: -400, message: "消息不能为空")
+        }
+        let outgoing = try PrivateMessageSending.request(
+            senderID: senderID, receiverID: talkerID, text: text,
+            timestamp: UInt64(Date().timeIntervalSince1970), deviceID: UUID().uuidString
+        )
+        var message = outgoing.msg
+        if let accessKey = LoginSession.shared.accessKey, !accessKey.isEmpty {
+            let payload = try await sendGrpcUnary(
+                path: "/bilibili.im.interface.v1.ImInterface/SendMsg", body: outgoing.serializedData()
+            )
+            let result = try Bilibili_Im_Interface_V1_RspSendMsg(serializedBytes: payload)
+            guard result.msgKey > 0 else { throw APIError.requestFailed }
+            message.msgKey = result.msgKey
+            if !result.msgContent.isEmpty { message.content = result.msgContent }
+            return PrivateMessageSendResult(message: message, emotions: result.eInfos)
+        }
+        // Cookie-only logins use the web endpoint; never resend automatically after an ambiguous failure.
+        guard let csrf = LoginSession.shared.cookies?.bili_jct, !csrf.isEmpty else {
+            throw APIError.businessError(code: -111, message: "登录已失效，请重新登录")
+        }
+        let parameters = [
+            "msg[sender_uid]": String(senderID), "msg[receiver_id]": String(talkerID),
+            "msg[receiver_type]": "1", "msg[msg_type]": "1", "msg[msg_status]": "0",
+            "msg[content]": message.content, "msg[timestamp]": String(message.timestamp),
+            "msg[new_face_version]": "1", "msg[dev_id]": outgoing.devID,
+            "from_firework": "0", "build": "0", "mobi_app": "web", "csrf": csrf, "csrf_token": csrf
+        ]
+        guard var request = makePostFormRequest(
+            urlString: "https://api.vc.bilibili.com/web_im/v1/web_im/send_msg", parameters: parameters
+        ) else { throw APIError.invalidURL }
+        // URLComponents leaves '+' unescaped; HTML form decoders interpret it as a space.
+        request.httpBody = PrivateMessageSending.formBody(parameters)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
+            throw APIError.requestFailed
+        }
+        let result = try JSONDecoder().decode(DecodableAPIResponse<PrivateMessageRESTSendData>.self, from: data)
+        guard result.code == 0 else {
+            throw APIError.businessError(code: result.code, message: result.message)
+        }
+        guard let key = result.data?.msgKey, key > 0 else { throw APIError.requestFailed }
+        message.msgKey = key
+        return PrivateMessageSendResult(message: message, emotions: [])
+    }
+
     private func fetchPrivateMessageUserCards(mids: [UInt64]) async throws -> [PrivateMessageUserCard] {
         guard !mids.isEmpty else { return [] }
 

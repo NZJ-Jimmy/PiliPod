@@ -15,6 +15,16 @@ struct MessageConversationView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var inputText = ""
+    @State private var isSending = false
+    @State private var sendError: String?
+    @State private var isEmotePanelShown = false
+    @State private var emotePackages: [ReplyEmotePackage] = []
+    @State private var selectedPackageID: Int?
+    @State private var isLoadingEmotes = false
+    @State private var emoteError: String?
+    @State private var emotionURLs: [String: String] = [:]
+    @State private var scrollToBottomID: UInt64?
+    @FocusState private var isInputFocused: Bool
     @State private var selectedVideo: VideoItem?
     @State private var selectedUserMID: Int?
     @Namespace private var videoHeroNamespace
@@ -28,7 +38,10 @@ struct MessageConversationView: View {
             messageContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            composer
+            if session.sessionType == 1 {
+                composer
+                if isEmotePanelShown { emotePanel }
+            }
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("")
@@ -60,7 +73,20 @@ struct MessageConversationView: View {
                 )
             }
         }
-        .task { await loadMessages() }
+        .task {
+            await loadMessages()
+            await loadEmotes()
+        }
+        .onChange(of: isInputFocused) { _, focused in
+            if focused { isEmotePanelShown = false }
+        }
+        .alert("发送失败", isPresented: Binding(
+            get: { sendError != nil }, set: { if !$0 { sendError = nil } }
+        )) {
+            Button("好的", role: .cancel) { sendError = nil }
+        } message: {
+            Text(sendError ?? "")
+        }
     }
 
     private var conversationHeader: some View {
@@ -127,6 +153,13 @@ struct MessageConversationView: View {
                     .padding(.vertical, 14)
                 }
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: scrollToBottomID) { _, key in
+                    if let key { withAnimation { proxy.scrollTo(key, anchor: .bottom) } }
+                }
+                .onChange(of: isEmotePanelShown) { _, _ in
+                    if let last = messages.last { proxy.scrollTo(last.msgKey, anchor: .bottom) }
+                }
                 .onAppear {
                     if let last = messages.last {
                         proxy.scrollTo(last.msgKey, anchor: .bottom)
@@ -154,6 +187,7 @@ struct MessageConversationView: View {
         } else {
             MessageBubble(
                 text: MessagePayload.text(from: message),
+                emotionURLs: emotionURLs,
                 isMine: isMine,
                 isFirstInGroup: !previousSameSender,
                 isLastInGroup: !nextSameSender
@@ -163,30 +197,28 @@ struct MessageConversationView: View {
 
     private var composer: some View {
         HStack(spacing: 10) {
-            Button(action: {}) {
-                Image(systemName: "photo.badge.plus")
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 38, height: 38)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .glassEffect(.regular.interactive(), in: .circle)
-
             HStack {
                 TextField("消息", text: $inputText, axis: .vertical)
+                    .focused($isInputFocused)
+                    .disabled(isSending)
                     .lineLimit(1 ... 4)
                     .font(.body)
                     .padding(.trailing, 38)
                     .overlay(alignment: .bottomTrailing) {
                         if !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Button(action: {}) {
-                                Image(systemName: "arrow.up")
+                            Button { Task { await sendMessage() } } label: {
+                                Group {
+                                    if isSending { ProgressView().tint(.white) }
+                                    else { Image(systemName: "arrow.up") }
+                                }
                                     .font(.system(size: 15, weight: .bold))
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
                                     .background(.biliPink, in: Circle())
                             }
                             .buttonStyle(.plain)
+                            .disabled(isSending || isLoading || !LoginSession.shared.isLogin)
+                            .accessibilityLabel(isSending ? "发送中" : "发送消息")
                             .transition(.opacity)
                         }
                     }
@@ -195,12 +227,18 @@ struct MessageConversationView: View {
             .padding(.vertical, 7)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
-            Button(action: {}) {
-                Image(systemName: "face.smiling")
+            Button {
+                isEmotePanelShown.toggle()
+                isInputFocused = !isEmotePanelShown
+                if isEmotePanelShown { Task { await loadEmotes() } }
+            } label: {
+                Image(systemName: isEmotePanelShown ? "keyboard" : "face.smiling")
                     .font(.system(size: 17, weight: .medium))
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(.plain)
+            .disabled(isSending)
+            .accessibilityLabel(isEmotePanelShown ? "显示键盘" : "选择表情")
             .foregroundStyle(.secondary)
             .glassEffect(.regular.interactive(), in: .circle)
         }
@@ -208,6 +246,106 @@ struct MessageConversationView: View {
         .padding(.top, 8)
         .padding(.bottom, 10)
         .background(.ultraThinMaterial)
+    }
+
+    private var emotePanel: some View {
+        VStack(spacing: 8) {
+            ScrollView(.horizontal) {
+                HStack {
+                    Button("Emoji") { selectedPackageID = nil }
+                        .buttonStyle(.bordered)
+                        .tint(selectedPackageID == nil ? .biliPink : .secondary)
+                    ForEach(emotePackages) { package in
+                        Button(package.text) { selectedPackageID = package.id }
+                            .buttonStyle(.bordered)
+                            .tint(selectedPackageID == package.id ? .biliPink : .secondary)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            if isLoadingEmotes { ProgressView("加载 B 站表情…") }
+            if let emoteError {
+                HStack {
+                    Text(emoteError).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Button("重试") { Task { await loadEmotes() } }
+                }
+            }
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 12) {
+                    if let package = emotePackages.first(where: { $0.id == selectedPackageID }) {
+                        ForEach(package.emote) { emote in
+                            Button { inputText += emote.text } label: {
+                                CachedAsyncImage(url: MessagePayload.url(from: emote.url)) { phase in
+                                    if case .success(let image) = phase {
+                                        image.resizable().scaledToFit()
+                                    } else {
+                                        Text(emote.text).font(.caption2).lineLimit(2)
+                                    }
+                                }
+                                .frame(width: 34, height: 34)
+                                .frame(maxWidth: .infinity, minHeight: 42)
+                            }
+                            .accessibilityLabel(emote.text)
+                        }
+                    } else {
+                        ForEach(Self.emoji, id: \.self) { emoji in
+                            Button { inputText += emoji } label: {
+                                Text(emoji).font(.system(size: 28))
+                                    .frame(maxWidth: .infinity, minHeight: 42)
+                            }
+                            .accessibilityLabel(emoji)
+                        }
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isSending)
+        .padding(12)
+        .frame(height: 250)
+        .background(.ultraThinMaterial)
+    }
+
+    private static let emoji = ["😀", "😁", "😂", "🤣", "😊", "🥰", "😍", "😘", "😎", "🤔", "😭", "🥺", "😅", "😆", "😉", "😋", "🤗", "😴", "😮", "😡", "👍", "👎", "👏", "🙏", "🤝", "💪", "✌️", "❤️", "💔", "💕", "🔥", "🎉", "✨", "🌹", "🍻"]
+
+    @MainActor
+    private func loadEmotes() async {
+        guard emotePackages.isEmpty, !isLoadingEmotes else { return }
+        isLoadingEmotes = true
+        emoteError = nil
+        defer { isLoadingEmotes = false }
+        do {
+            emotePackages = try await BiliAPI.shared.fetchUserReplyEmotePackages()
+            for package in emotePackages {
+                for emote in package.emote { emotionURLs[emote.text] = emote.url }
+            }
+            if emotePackages.isEmpty { emoteError = "暂无 B 站表情，可使用 Emoji" }
+        } catch {
+            emoteError = "B 站表情加载失败，可使用 Emoji"
+            ErrorLogService.record(error, context: "加载私信表情")
+        }
+    }
+
+    @MainActor
+    private func sendMessage() async {
+        guard !isSending, !isLoading, session.sessionType == 1,
+              !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let text = inputText
+        isSending = true
+        defer { isSending = false }
+        do {
+            let result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
+            for emotion in result.emotions { emotionURLs[emotion.text] = emotion.url }
+            if !messages.contains(where: { $0.msgKey == result.message.msgKey }) {
+                messages.append(result.message)
+            }
+            inputText = ""
+            errorMessage = nil
+            scrollToBottomID = result.message.msgKey
+        } catch {
+            sendError = "\(error.localizedDescription)\n内容已保留。若是网络超时，请先确认对方是否已收到，再决定是否重发。"
+            ErrorLogService.record(error, context: "发送私信")
+        }
     }
 
     private func loadMessages() async {
@@ -365,6 +503,7 @@ private struct MessageCardPayload {
 
 private struct MessageBubble: View {
     let text: String
+    let emotionURLs: [String: String]
     let isMine: Bool
     let isFirstInGroup: Bool
     let isLastInGroup: Bool
@@ -372,7 +511,7 @@ private struct MessageBubble: View {
     var body: some View {
         HStack {
             if isMine { Spacer(minLength: 44) }
-            Text(text)
+            PrivateMessageText(text: text, emotionURLs: emotionURLs)
                 .font(.body)
                 .foregroundStyle(isMine ? .white : .primary)
                 .padding(.horizontal, 14)
