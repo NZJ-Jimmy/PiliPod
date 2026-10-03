@@ -176,6 +176,18 @@ struct LoginMethodTests {
         #expect(cookies.extraCookies == nil)
         #expect(cookies.DedeUserID == "123")
     }
+    @Test func cookieOnlyAccountExportsNullTokensAndAssignedRoles() throws {
+        let account = try BiliAuthService.parseCookie("SESSDATA=fake; bili_jct=csrf; DedeUserID=123")
+        var state = AccountState()
+        state.add(account, activate: true)
+        let data = try LoginImportService.encode(state)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: [String: Any]])
+        #expect(json["123"]?["accessKey"] is NSNull)
+        #expect(json["123"]?["refresh"] is NSNull)
+        let restored = try LoginImportService.decode(data)
+        #expect(restored[0].accessKey == nil)
+        #expect(restored[0].type == [0, 1, 2, 3])
+    }
     @Test func smsCredentialCannotBeUsedForAnotherPhone() async throws {
         let auth = service { _ in (200, ["code": 0, "data": ["recaptcha_url": "", "captcha_key": "fake"]]) }
         let model = LoginViewModel(authService: auth)

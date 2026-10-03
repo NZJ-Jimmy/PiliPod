@@ -255,7 +255,7 @@ private struct AppIconPreview: View {
 #endif
 }
 
-private struct JSONExportDocument: FileDocument {
+struct JSONExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
 
     let data: Data

@@ -31,8 +31,8 @@ enum LoginImportService {
                 state.assignments[role] == account.id ? index : nil
             }
             payload[account.id] = ["cookies": account.cookies.dictionary,
-                "accessKey": account.accessKey as Any? ?? NSNull(),
-                "refresh": account.refresh as Any? ?? NSNull(), "type": roles]
+                "accessKey": account.accessKey.map { $0 as Any } ?? NSNull(),
+                "refresh": account.refresh.map { $0 as Any } ?? NSNull(), "type": roles]
         }
         return try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
     }
