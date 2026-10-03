@@ -22,37 +22,37 @@ struct LibraryFoldersView: View {
                 LibraryLoginPrompt(showLogin: $showLogin)
             } else {
                 LazyVStack(spacing: 0) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 16)], spacing: 20) {
-                    ForEach(model.entries) { folder in
-                        if folder.isUnavailable || (subscriptions && folder.type != 11 && folder.type != 21) {
-                            folderCard(folder)
-                                .opacity(0.5)
-                        } else {
-                            NavigationLink {
-                                LibraryMediaView(folder: folder)
-                            } label: {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), spacing: 16)], spacing: 20) {
+                        ForEach(model.entries) { folder in
+                            if folder.isUnavailable || (subscriptions && folder.type != 11 && folder.type != 21) {
                                 folderCard(folder)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                if subscriptions {
-                                    Button("取消订阅", systemImage: "bookmark.slash", role: .destructive) {
-                                        pendingUnsubscribe = folder
+                                    .opacity(0.5)
+                            } else {
+                                NavigationLink {
+                                    LibraryMediaView(folder: folder)
+                                } label: {
+                                    folderCard(folder)
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    if subscriptions {
+                                        Button("取消订阅", systemImage: "bookmark.slash", role: .destructive) {
+                                            pendingUnsubscribe = folder
+                                        }
+                                        .disabled(isUnsubscribing)
                                     }
-                                    .disabled(isUnsubscribing)
                                 }
                             }
                         }
                     }
-                }
-                .padding(16)
+                    .padding(16)
 
-                LibraryLoadingFooter(
-                    isLoading: model.isLoading, error: model.errorMessage,
-                    isEmpty: model.entries.isEmpty, hasMore: model.hasMore,
-                    emptyText: subscriptions ? "暂无订阅的合集或收藏夹" : "暂无收藏夹",
-                    load: { await model.loadMore() }
-                )
+                    LibraryLoadingFooter(
+                        isLoading: model.isLoading, error: model.errorMessage,
+                        isEmpty: model.entries.isEmpty, hasMore: model.hasMore,
+                        emptyText: subscriptions ? "暂无订阅的合集或收藏夹" : "暂无收藏夹",
+                        load: { await model.loadMore() }
+                    )
                 }
             }
         }
@@ -60,7 +60,7 @@ struct LibraryFoldersView: View {
         .navigationTitle(subscriptions ? "我的订阅" : "我的收藏")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .task(id: session.cookieString) {
+        .task(id: "\(session.isLogin)-\(session.cookieString)") {
             model.reset()
             if session.isLogin { await model.loadMore() }
         }
@@ -201,7 +201,7 @@ struct LibraryMediaView: View {
         .navigationTitle(folder.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .task(id: session.cookieString) {
+        .task(id: "\(session.isLogin)-\(session.cookieString)") {
             model.reset()
             if session.isLogin { await model.loadMore() }
         }

@@ -21,50 +21,50 @@ struct MyView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-            VStack(spacing: 20) {
-                // 顶部按钮
-                HStack {
-                    Spacer()
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gear")
-                            .frame(width: 20, height: 20)
-                            .padding(10)
-                    }
-                    .tint(.primary)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                }
-                .padding(.horizontal, 30)
-                .padding(.top, 10)
-
-                headerView
-                    .padding(.horizontal, 30)
-
-                quickActionRow
-                    .padding(.horizontal, 30)
-
-                Button {
-                    showFavorites = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(Color("BiliPink"))
-                        Text("我的收藏").font(.headline)
+                VStack(spacing: 20) {
+                    // 顶部按钮
+                    HStack {
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "gear")
+                                .frame(width: 20, height: 20)
+                                .padding(10)
+                        }
+                        .tint(.primary)
+                        .glassEffect(.regular.interactive(), in: .circle)
                     }
-                    .padding(18)
-                    .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("我的收藏")
-                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18))
-                .padding(.horizontal, 30)
+                    .padding(.horizontal, 30)
+                    .padding(.top, 10)
 
-                Spacer()
-            }
+                    headerView
+                        .padding(.horizontal, 30)
+
+                    quickActionRow
+                        .padding(.horizontal, 30)
+
+                    Button {
+                        showFavorites = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(Color("BiliPink"))
+                            Text("我的收藏").font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        .padding(18)
+                        .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("我的收藏")
+                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18))
+                    .padding(.horizontal, 30)
+
+                    Spacer()
+                }
             }
             .task {
                 await viewModel.loadUser()
