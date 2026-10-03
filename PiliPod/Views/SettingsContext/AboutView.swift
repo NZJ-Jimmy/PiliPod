@@ -103,8 +103,8 @@ struct AboutView: View {
         .listStyle(.insetGrouped)
         .fileImporter(
             isPresented: $showImportSheet,
-            // Accept provider-reported data types; the import services validate JSON.
-            allowedContentTypes: [.data]
+            // Account exports may be reported as generic data by file providers.
+            allowedContentTypes: activeImporter == .login ? [.data] : [.json]
         ) { result in
             handleImportResult(result, for: activeImporter)
             activeImporter = nil
