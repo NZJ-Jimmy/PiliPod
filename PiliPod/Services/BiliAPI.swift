@@ -238,17 +238,32 @@ class BiliAPI {
     }
 
     func sendPrivateMessage(talkerID: UInt64, text: String) async throws -> PrivateMessageSendResult {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw APIError.businessError(code: -400, message: "消息不能为空")
+        }
+        return try await sendPrivateMessage(talkerID: talkerID, text: text, image: nil)
+    }
+
+    func sendPrivateMessageImage(talkerID: UInt64, image: PrivateMessageImagePayload) async throws -> PrivateMessageSendResult {
+        try await sendPrivateMessage(talkerID: talkerID, text: "", image: image)
+    }
+
+    private func sendPrivateMessage(talkerID: UInt64, text: String, image: PrivateMessageImagePayload?) async throws -> PrivateMessageSendResult {
         guard LoginSession.shared.isLogin,
               let senderID = UInt64(LoginSession.shared.cookies?.DedeUserID ?? ""), senderID > 0 else {
             throw APIError.businessError(code: -101, message: "请先登录")
         }
-        guard talkerID > 0, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw APIError.businessError(code: -400, message: "消息不能为空")
+        guard talkerID > 0 else {
+            throw APIError.businessError(code: -400, message: "无效的会话")
         }
-        let outgoing = try PrivateMessageSending.request(
+        var outgoing = try PrivateMessageSending.request(
             senderID: senderID, receiverID: talkerID, text: text,
             timestamp: UInt64(Date().timeIntervalSince1970), deviceID: UUID().uuidString
         )
+        if let image {
+            outgoing = try PrivateMessageSending.imageRequest(senderID: senderID, receiverID: talkerID,
+                image: image, timestamp: outgoing.msg.timestamp, deviceID: outgoing.devID)
+        }
         var message = outgoing.msg
         if let accessKey = LoginSession.shared.accessKey, !accessKey.isEmpty {
             let payload = try await sendGrpcUnary(
@@ -266,7 +281,7 @@ class BiliAPI {
         }
         let parameters = [
             "msg[sender_uid]": String(senderID), "msg[receiver_id]": String(talkerID),
-            "msg[receiver_type]": "1", "msg[msg_type]": "1", "msg[msg_status]": "0",
+            "msg[receiver_type]": "1", "msg[msg_type]": String(message.msgType.rawValue), "msg[msg_status]": "0",
             "msg[content]": message.content, "msg[timestamp]": String(message.timestamp),
             "msg[new_face_version]": "1", "msg[dev_id]": outgoing.devID,
             "from_firework": "0", "build": "0", "mobi_app": "web", "csrf": csrf, "csrf_token": csrf
@@ -1718,7 +1733,17 @@ class BiliAPI {
 
     // MARK: - 发表评论 / 上传评论图片
 
-    func uploadCommentImage(data: Data, fileName: String = "comment.jpg") async throws -> CommentImageUploadData {
+    func uploadPrivateMessageImage(data: Data) async throws -> PrivateMessageImagePayload {
+        let uploaded = try await uploadCommentImage(data: data, fileName: "message.jpg", business: "im")
+        guard uploaded.imageWidth > 0, uploaded.imageHeight > 0,
+              let url = URL(string: uploaded.imageURL), ["https", "http"].contains(url.scheme ?? "") else {
+            throw APIError.requestFailed
+        }
+        return PrivateMessageImagePayload(url: uploaded.imageURL, height: uploaded.imageHeight,
+            width: uploaded.imageWidth, imageType: "jpg", original: 1, size: uploaded.imgSize)
+    }
+
+    func uploadCommentImage(data: Data, fileName: String = "comment.jpg", business: String = "new_dyn") async throws -> CommentImageUploadData {
         guard LoginSession.shared.isLogin else {
             throw APIError.responseError(-101)
         }
@@ -1739,7 +1764,8 @@ class BiliAPI {
             boundary: boundary,
             csrf: csrf,
             fileData: data,
-            fileName: fileName
+            fileName: fileName,
+            business: business
         )
 
         let (respData, response) = try await URLSession.shared.data(for: request)
@@ -1814,7 +1840,8 @@ class BiliAPI {
         boundary: String,
         csrf: String,
         fileData: Data,
-        fileName: String
+        fileName: String,
+        business: String
     ) -> Data {
         var body = Data()
 
@@ -1825,8 +1852,8 @@ class BiliAPI {
         }
 
         appendField(name: "csrf", value: csrf)
-        appendField(name: "category", value: "daily")
-        appendField(name: "biz", value: "new_dyn")
+        if business != "im" { appendField(name: "category", value: "daily") }
+        appendField(name: "biz", value: business)
 
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file_up\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)

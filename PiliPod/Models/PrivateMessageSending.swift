@@ -24,6 +24,36 @@ enum PrivateMessageSending {
         request.devID = deviceID
         return request
     }
+
+    static func imageRequest(senderID: UInt64, receiverID: UInt64, image: PrivateMessageImagePayload,
+                             timestamp: UInt64, deviceID: String) throws -> Bilibili_Im_Interface_V1_ReqSendMsg {
+        var request = try self.request(senderID: senderID, receiverID: receiverID, text: "",
+                                       timestamp: timestamp, deviceID: deviceID)
+        request.msg.msgType = .enMsgTypePic
+        request.msg.content = String(decoding: try JSONEncoder().encode(image), as: UTF8.self)
+        return request
+    }
+}
+
+struct PrivateMessageImagePayload: Codable {
+    let url: String
+    let height: Int
+    let width: Int
+    let imageType: String
+    let original: Int
+    let size: Double
+}
+
+extension PrivateMessageImagePayload {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        url = try values.decode(String.self, forKey: .url)
+        height = try values.decodeIfPresent(Int.self, forKey: .height) ?? 240
+        width = try values.decodeIfPresent(Int.self, forKey: .width) ?? 240
+        imageType = try values.decodeIfPresent(String.self, forKey: .imageType) ?? "jpg"
+        original = try values.decodeIfPresent(Int.self, forKey: .original) ?? 1
+        size = try values.decodeIfPresent(Double.self, forKey: .size) ?? 0
+    }
 }
 
 struct PrivateMessageSendResult {

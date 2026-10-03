@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import PhotosUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -16,6 +17,12 @@ struct MessageConversationView: View {
     @State private var errorMessage: String?
     @State private var inputText = ""
     @State private var isSending = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var pendingPhoto: PrivateMessagePhoto?
+    @State private var uploadedPhoto: PrivateMessageImagePayload?
+    @State private var isPreparingPhoto = false
+    @State private var photoStatus: String?
+    @State private var presentedImage: PrivateMessageImagePayload?
     @State private var sendError: String?
     @State private var isEmotePanelShown = false
     @State private var emotePackages: [ReplyEmotePackage] = []
@@ -39,6 +46,7 @@ struct MessageConversationView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if session.sessionType == 1 {
+                if let pendingPhoto { photoPreview(pendingPhoto) }
                 composer
                 if isEmotePanelShown { emotePanel }
             }
@@ -79,6 +87,25 @@ struct MessageConversationView: View {
         }
         .onChange(of: isInputFocused) { _, focused in
             if focused { isEmotePanelShown = false }
+        }
+        .task(id: selectedPhoto) {
+            guard let item = selectedPhoto else { return }
+            await preparePhoto(item)
+        }
+        .sheet(isPresented: Binding(get: { presentedImage != nil }, set: { if !$0 { presentedImage = nil } })) {
+            NavigationStack {
+                if let payload = presentedImage {
+                    CachedAsyncImage(url: MessagePayload.url(from: payload.url)) { phase in
+                        if case .success(let image) = phase { image.resizable().scaledToFit() }
+                        else if case .failure = phase { ContentUnavailableView("图片加载失败", systemImage: "photo") }
+                        else { ProgressView() }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .navigationTitle("图片")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { presentedImage = nil } } }
+                }
+            }
         }
         .alert("发送失败", isPresented: Binding(
             get: { sendError != nil }, set: { if !$0 { sendError = nil } }
@@ -175,7 +202,11 @@ struct MessageConversationView: View {
         let previousSameSender = index > 0 && messages[index - 1].senderUid == message.senderUid
         let nextSameSender = index + 1 < messages.count && messages[index + 1].senderUid == message.senderUid
 
-        if let card = MessageCardPayload(message: message) {
+        if message.msgType == .enMsgTypePic,
+           let data = message.content.data(using: .utf8),
+           let payload = try? JSONDecoder().decode(PrivateMessageImagePayload.self, from: data) {
+            PrivateMessageImageBubble(payload: payload, isMine: isMine) { presentedImage = payload }
+        } else if let card = MessageCardPayload(message: message) {
             MessageCardView(
                 card: card,
                 heroNamespace: videoHeroNamespace,
@@ -197,6 +228,14 @@ struct MessageConversationView: View {
 
     private var composer: some View {
         HStack(spacing: 10) {
+            PhotosPicker(selection: $selectedPhoto, matching: .images, preferredItemEncoding: .compatible) {
+                if isPreparingPhoto { ProgressView().frame(width: 38, height: 38) }
+                else { Image(systemName: "plus").font(.system(size: 20)).frame(width: 38, height: 38) }
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .disabled(isSending || isPreparingPhoto || isLoading || !LoginSession.shared.isLogin)
+            .accessibilityLabel("选择照片")
             HStack {
                 TextField("消息", text: $inputText, axis: .vertical)
                     .focused($isInputFocused)
@@ -205,7 +244,7 @@ struct MessageConversationView: View {
                     .font(.body)
                     .padding(.trailing, 38)
                     .overlay(alignment: .bottomTrailing) {
-                        if !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if pendingPhoto != nil || !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Button { Task { await sendMessage() } } label: {
                                 Group {
                                     if isSending { ProgressView().tint(.white) }
@@ -217,7 +256,7 @@ struct MessageConversationView: View {
                                     .background(.biliPink, in: Circle())
                             }
                             .buttonStyle(.plain)
-                            .disabled(isSending || isLoading || !LoginSession.shared.isLogin)
+                            .disabled(isSending || isPreparingPhoto || isLoading || !LoginSession.shared.isLogin)
                             .accessibilityLabel(isSending ? "发送中" : "发送消息")
                             .transition(.opacity)
                         }
@@ -326,20 +365,81 @@ struct MessageConversationView: View {
         }
     }
 
+    private func photoPreview(_ photo: PrivateMessagePhoto) -> some View {
+        HStack(spacing: 12) {
+            Image(uiImage: photo.image).resizable().scaledToFit().frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(photoStatus ?? "已选图片").font(.subheadline)
+                Text("图片将单独发送，文字草稿保留").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isSending { ProgressView() }
+            else {
+                Button {
+                    pendingPhoto = nil
+                    uploadedPhoto = nil
+                    selectedPhoto = nil
+                } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
+                .accessibilityLabel("移除图片")
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
+    }
+
+    @MainActor
+    private func preparePhoto(_ item: PhotosPickerItem) async {
+        isPreparingPhoto = true
+        isInputFocused = false
+        isEmotePanelShown = false
+        defer { isPreparingPhoto = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                throw APIError.businessError(code: -400, message: "无法读取图片，请重新选择")
+            }
+            try Task.checkCancellation()
+            let photo = try PrivateMessagePhoto.prepare(data)
+            pendingPhoto = photo
+            uploadedPhoto = nil
+            photoStatus = nil
+            selectedPhoto = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            selectedPhoto = nil
+            sendError = error.localizedDescription
+        }
+    }
+
     @MainActor
     private func sendMessage() async {
-        guard !isSending, !isLoading, session.sessionType == 1,
-              !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !isSending, !isPreparingPhoto, !isLoading, session.sessionType == 1,
+              pendingPhoto != nil || !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let text = inputText
         isSending = true
-        defer { isSending = false }
+        defer { isSending = false; photoStatus = nil }
         do {
-            let result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
+            let result: PrivateMessageSendResult
+            if let photo = pendingPhoto {
+                if uploadedPhoto == nil {
+                    photoStatus = "正在上传图片…"
+                    uploadedPhoto = try await BiliAPI.shared.uploadPrivateMessageImage(data: photo.data)
+                }
+                guard let uploadedPhoto else { throw APIError.requestFailed }
+                photoStatus = "正在发送图片…"
+                result = try await BiliAPI.shared.sendPrivateMessageImage(talkerID: session.talkerID, image: uploadedPhoto)
+                pendingPhoto = nil
+                self.uploadedPhoto = nil
+                selectedPhoto = nil
+            } else {
+                result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
+                inputText = ""
+            }
             for emotion in result.emotions { emotionURLs[emotion.text] = emotion.url }
             if !messages.contains(where: { $0.msgKey == result.message.msgKey }) {
                 messages.append(result.message)
             }
-            inputText = ""
             errorMessage = nil
             scrollToBottomID = result.message.msgKey
         } catch {
