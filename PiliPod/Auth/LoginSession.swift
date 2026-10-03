@@ -99,6 +99,7 @@ final class LoginSession: ObservableObject {
     @Published private(set) var storageError: String?
     private let lock = NSRecursiveLock()
     private var state = AccountState()
+    private var restoreFailed = false
     private let vault: AccountVault
     init(vault: AccountVault = KeychainAccountVault()) { self.vault = vault }
     var snapshot: AccountState {
@@ -119,6 +120,11 @@ final class LoginSession: ObservableObject {
     // Save before publishing; failed writes leave the working session intact.
     @MainActor
     private func update(_ mutation: (inout AccountState) throws -> Void) throws {
+        // Retry a failed read before writing, so an empty in-memory state cannot overwrite existing accounts.
+        if restoreFailed {
+            restore()
+            guard !restoreFailed else { throw AccountStorageError.keychain(errSecNotAvailable) }
+        }
         lock.lock()
         defer { lock.unlock() }
         var next = state
@@ -156,6 +162,8 @@ final class LoginSession: ObservableObject {
     func setIncognito(_ enabled: Bool) throws { try update { $0.incognito = enabled } }
     @MainActor
     func restore(defaults: UserDefaults = .standard) {
+        restoreFailed = false
+        storageError = nil
         do {
             if let data = try vault.load() {
                 let restored = try JSONDecoder().decode(AccountState.self, from: data)
@@ -171,7 +179,10 @@ final class LoginSession: ObservableObject {
                     refresh: defaults.string(forKey: "bili_refresh"), type: nil)])
                 clearLegacy(defaults)
             }
-        } catch { storageError = error.localizedDescription }
+        } catch {
+            restoreFailed = true
+            storageError = error.localizedDescription
+        }
     }
     @MainActor
     private func clearLegacy(_ defaults: UserDefaults) {

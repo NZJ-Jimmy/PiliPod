@@ -61,7 +61,7 @@ struct MyView: View {
                 OfflineCacheView(initialPrefill: nil)
             }
             .navigationDestination(isPresented: $showWatchLater) {
-                WatchLaterView()
+                WatchLaterView().id(loginSession.selectedID(for: .main))
             }
             .navigationDestination(item: $followingRoute) { route in
                 FollowingListView(mid: route.mid)

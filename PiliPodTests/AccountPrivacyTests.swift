@@ -5,7 +5,11 @@ import Testing
 private final class MemoryAccountVault: AccountVault {
     var data: Data?
     var failSave = false
-    func load() throws -> Data? { data }
+    var failLoad = false
+    func load() throws -> Data? {
+        if failLoad { throw AccountStorageError.keychain(-1) }
+        return data
+    }
     func save(_ data: Data) throws {
         if failSave { throw AccountStorageError.keychain(-1) }
         self.data = data
@@ -157,6 +161,26 @@ struct AccountPrivacyTests {
         #expect(result == ["old"])
         #expect(defaults.stringArray(forKey: "PiliPod.searchHistory") == ["old"])
         #expect(SearchHistoryStore.record("new", in: result, incognito: false, defaults: defaults) == ["new", "old"])
+    }
+
+    @Test func failedRestoreCannotOverwriteStoredAccounts() throws {
+        let vault = MemoryAccountVault()
+        let original = LoginSession(vault: vault)
+        try original.add([account("1")])
+        let saved = vault.data
+        vault.failLoad = true
+        let session = LoginSession(vault: vault)
+        session.restore()
+        #expect(throws: AccountStorageError.self) { try session.setIncognito(true) }
+        #expect(vault.data == saved)
+        vault.failLoad = false
+        try session.setIncognito(true)
+        #expect(session.account(for: .main)?.id == "1")
+        #expect(session.incognito)
+        let restored = LoginSession(vault: vault)
+        restored.restore()
+        #expect(restored.incognito)
+        #expect(!restored.shouldReportHistory)
     }
 
 }

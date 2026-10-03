@@ -60,7 +60,7 @@ final class LoginViewModel: ObservableObject {
                 loginSucceeded = true
                 print("登录成功并已保存登录状态")
             } else {
-                errorMessage = "登录成功，但解析登录凭证失败"
+                errorMessage = "登录成功，但登录凭据无效或无法保存到安全存储"
                 print("登录成功但凭据解析或安全存储失败")
             }
 
