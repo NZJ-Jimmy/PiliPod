@@ -57,6 +57,7 @@ struct MyView: View {
                         }
                         .padding(18)
                         .foregroundStyle(.primary)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("我的收藏")

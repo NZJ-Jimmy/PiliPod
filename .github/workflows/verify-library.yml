@@ -76,3 +76,14 @@ jobs:
           path: |
             build/*.log
             build/LibraryTests.xcresult
+      - name: Export UI test screenshots
+        if: always()
+        run: |
+          if [ -d build/LibraryTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/LibraryTests.xcresult --output-path build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Library-UI-screenshots
+          path: build/screenshots
