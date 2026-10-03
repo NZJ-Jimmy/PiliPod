@@ -2053,6 +2053,67 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
     }
 }
 
+#if DEBUG
+/// Network-free UI test surface using the production pager and navigation setup.
+struct VideoDetailGestureTestRoot: View {
+    @State private var isPresented = false
+    @Namespace private var namespace
+
+    var body: some View {
+        NavigationStack {
+            Button("Open detail") { isPresented = true }
+                .accessibilityIdentifier("gesture.open")
+                .matchedTransitionSource(id: "gesture.detail", in: namespace)
+                .navigationDestination(isPresented: $isPresented) {
+                    VideoDetailGestureTestContent()
+                        .navigationTransition(.zoom(sourceID: "gesture.detail", in: namespace))
+                }
+        }
+    }
+}
+
+private struct VideoDetailGestureTestContent: View {
+    @State private var selectedTab: VideoDetailPage.VideoDetailTab = .intro
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                Color.black.frame(height: 160)
+                Text(selectedTab.rawValue)
+                    .accessibilityIdentifier(selectedTab == .intro ? "gesture.tab.intro" : "gesture.tab.comments")
+                    .frame(height: 44)
+                TabPager(
+                    selectedTab: $selectedTab,
+                    width: geometry.size.width,
+                    isSwipeEnabled: true,
+                    leadingSwipeExclusionWidth: 32,
+                    introContent: {
+                        ScrollView {
+                            VStack {
+                                ForEach(0..<80) { index in
+                                    Text("Intro row \(index)")
+                                        .frame(maxWidth: .infinity, minHeight: 48)
+                                        .accessibilityIdentifier("gesture.intro.\(index)")
+                                }
+                            }
+                        }
+                    },
+                    commentsContent: {
+                        List(0..<80, id: \.self) { index in
+                            Text("Comment row \(index)")
+                        }
+                        .listStyle(.plain)
+                    }
+                )
+            }
+        }
+        .background(NavigationPopGestureEnabler())
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+#endif
+
 #if canImport(UIKit)
 struct SystemVolumeController {
     private let volumeView: MPVolumeView

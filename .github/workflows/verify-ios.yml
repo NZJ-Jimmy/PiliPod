@@ -17,14 +17,34 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.6'
-      - name: Build for iOS Simulator
-        run: >-
-          xcodebuild build
-          -project PiliPod.xcodeproj
-          -scheme PiliPod
-          -configuration Debug
-          -destination 'generic/platform=iOS Simulator'
-          CODE_SIGNING_ALLOWED=NO
+      - name: Test detail gestures on iOS Simulator
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              if "iOS" in runtime:
+                  for device in devices[runtime]:
+                      if device["name"].startswith("iPhone"):
+                          print(device["udid"])
+                          sys.exit(0)
+          sys.exit("No available iPhone simulator")')
+          xcodebuild test \
+            -project PiliPod.xcodeproj \
+            -scheme PiliPod \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -only-testing:PiliPodUITests/VideoDetailGestureUITests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath build/GestureTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Upload gesture test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Video-detail-gesture-test-results
+          path: build/GestureTests.xcresult
+          retention-days: 14
 
   ipa:
     if: github.ref == 'refs/heads/codex/video-detail-back-gesture'

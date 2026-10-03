@@ -50,8 +50,10 @@ struct VideoDetailTabPanGesture: UIGestureRecognizerRepresentable {
         }
 
         func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            // Check the actual touch-down position, before the pan moves.
-            gesture.isEnabled && converter.localLocation.x > gesture.leadingExclusionWidth
+            // Use the touch itself: the converter's current location need not
+            // have been updated when UIKit asks whether to receive a new touch.
+            guard gesture.isEnabled, let window = touch.window else { return false }
+            return touch.location(in: window).x > window.bounds.minX + gesture.leadingExclusionWidth
         }
 
         func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
@@ -81,14 +83,6 @@ struct VideoDetailTabPanGesture: UIGestureRecognizerRepresentable {
                 return false
             }
             return other === navigation.interactiveContentPopGestureRecognizer
-        }
-
-        func gestureRecognizer(
-            _ recognizer: UIGestureRecognizer,
-            shouldRequireFailureOf other: UIGestureRecognizer
-        ) -> Bool {
-            guard let navigation = navigationController(for: recognizer.view) else { return false }
-            return other === navigation.interactivePopGestureRecognizer
         }
 
         private func navigationController(for view: UIView?) -> UINavigationController? {
