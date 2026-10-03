@@ -112,12 +112,13 @@ public class BiliAuthService {
             buvid3: cookieDict["buvid3"] ?? BiliDeviceConfig.shared.buvid
         )
 
-        LoginSession.shared.cookies = cookie
-        LoginSession.shared.accessKey = accessToken
-        LoginSession.shared.refresh = refreshToken
-        LoginSession.shared.type = nil
-        LoginSession.shared.isLogin = true
-        LoginImportService.saveToLocal(cookie)
+        do {
+            try LoginSession.shared.add([BiliAccount(cookies: cookie, accessKey: accessToken,
+                refresh: refreshToken, type: nil)])
+        } catch {
+            ErrorLogService.record(error, context: "保存登录信息")
+            return false
+        }
         return true
     }
 

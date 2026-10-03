@@ -846,6 +846,7 @@ struct SearchView: View {
     }
 
     private func recordSearchKeyword(_ keyword: String) {
+        guard !LoginSession.shared.incognito else { return }
         var updatedHistory = searchHistory.filter { $0 != keyword }
         updatedHistory.insert(keyword, at: 0)
         searchHistory = Array(updatedHistory.prefix(SearchHistoryStore.maximumCount))

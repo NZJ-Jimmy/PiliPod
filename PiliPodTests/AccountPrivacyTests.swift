@@ -1,0 +1,124 @@
+import Foundation
+import Testing
+@testable import PiliPod
+
+private final class MemoryAccountVault: AccountVault {
+    var data: Data?
+    var failSave = false
+    func load() throws -> Data? { data }
+    func save(_ data: Data) throws {
+        if failSave { throw AccountStorageError.keychain(-1) }
+        self.data = data
+    }
+}
+
+struct AccountPrivacyTests {
+    private func account(_ id: String, type: [Int]? = nil) -> BiliAccount {
+        BiliAccount(cookies: BiliCookie(SESSDATA: "session-\(id)", bili_jct: "csrf-\(id)",
+            DedeUserID: id, sid: nil, buvid3: nil), accessKey: "token-\(id)", refresh: "refresh-\(id)", type: type)
+    }
+    @Test func roleAssignmentsRemainIndependentAndSurviveRestore() throws {
+        let vault = MemoryAccountVault()
+        let session = LoginSession(vault: vault)
+        try session.add([account("1")])
+        try session.add([account("2")])
+        try session.assign("2", to: .playback)
+        try session.assign("0", to: .recommendation)
+        let restored = LoginSession(vault: vault)
+        restored.restore()
+        #expect(restored.account(for: .main)?.id == "2")
+        #expect(restored.account(for: .history)?.id == "1")
+        #expect(restored.account(for: .recommendation) == nil)
+        #expect(restored.account(for: .playback)?.accessKey == "token-2")
+    }
+    @Test func incognitoPreservesAssignmentsAndStopsHistory() throws {
+        let session = LoginSession(vault: MemoryAccountVault())
+        try session.add([account("1")])
+        let assignments = session.snapshot.assignments
+        try session.setIncognito(true)
+        #expect(!session.shouldReportHistory)
+        #expect(session.account(for: .playback)?.id == "1")
+        #expect(session.snapshot.assignments == assignments)
+        try session.setIncognito(false)
+        #expect(session.shouldReportHistory)
+        try session.assign("0", to: .history)
+        #expect(!session.shouldReportHistory)
+    }
+    @Test func removalUsesAnonymousWithoutChangingOtherAccounts() throws {
+        let session = LoginSession(vault: MemoryAccountVault())
+        try session.add([account("1"), account("2")])
+        try session.assign("2", to: .playback)
+        try session.remove("1")
+        #expect(!session.isLogin)
+        #expect(!session.shouldReportHistory)
+        #expect(session.account(for: .playback)?.id == "2")
+        #expect(session.accounts.count == 1)
+    }
+    @Test func failedWriteLeavesWorkingSessionAndLegacyDataIntact() throws {
+        let vault = MemoryAccountVault()
+        let session = LoginSession(vault: vault)
+        try session.add([account("1")])
+        vault.failSave = true
+        #expect(throws: AccountStorageError.self) { try session.assign("0") }
+        #expect(session.account(for: .main)?.id == "1")
+        let suite = "PiliPod.Tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(try JSONEncoder().encode(account("2").cookies), forKey: "bili_cookie")
+        vault.data = nil
+        session.restore(defaults: defaults)
+        #expect(defaults.data(forKey: "bili_cookie") != nil)
+        #expect(session.storageError != nil)
+    }
+    @Test func legacyMigrationMovesAllCredentialsToVault() throws {
+        let suite = "PiliPod.Tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(try JSONEncoder().encode(account("1").cookies), forKey: "bili_cookie")
+        defaults.set("legacy-token", forKey: "bili_accessKey")
+        defaults.set("legacy-refresh", forKey: "bili_refresh")
+        let vault = MemoryAccountVault()
+        let session = LoginSession(vault: vault)
+        session.restore(defaults: defaults)
+        #expect(session.accessKey == "legacy-token")
+        #expect(session.refresh == "legacy-refresh")
+        #expect(defaults.data(forKey: "bili_cookie") == nil)
+        #expect(vault.data != nil)
+        for role in AccountRole.allCases { #expect(session.selectedID(for: role) == "1") }
+    }
+    @Test func importedRolesAndAllAccountsArePreserved() throws {
+        let payload: [String: Any] = [
+            "1": ["cookies": ["SESSDATA": "a", "bili_jct": "b", "DedeUserID": "1"], "type": [0, 1]],
+            "2": ["cookies": ["SESSDATA": "c", "bili_jct": "d", "DedeUserID": "2"], "type": [3]]
+        ]
+        let decoded = try LoginImportService.decode(JSONSerialization.data(withJSONObject: payload))
+        let session = LoginSession(vault: MemoryAccountVault())
+        try session.add(decoded)
+        #expect(session.accounts.count == 2)
+        #expect(session.account(for: .main)?.id == "1")
+        #expect(session.account(for: .history)?.id == "1")
+        #expect(session.account(for: .recommendation) == nil)
+        #expect(session.account(for: .playback)?.id == "2")
+        #expect(throws: AccountStorageError.self) {
+            try LoginImportService.decode(Data("{\"1\":{\"cookies\":{}}}".utf8))
+        }
+    }
+    @Test func anonymousRequestRemovesCookiesAndDisablesCookieJar() throws {
+        var request = URLRequest(url: try #require(URL(string: "https://api.bilibili.com/test")))
+        AccountRequest.apply(account("1"), to: &request)
+        #expect(request.value(forHTTPHeaderField: "Cookie")?.contains("session-1") == true)
+        AccountRequest.apply(nil, to: &request)
+        #expect(request.value(forHTTPHeaderField: "Cookie") == nil)
+        #expect(!request.httpShouldHandleCookies)
+        #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
+    }
+    @Test func capturedCredentialsDoNotChangeAfterSwitching() throws {
+        let session = LoginSession(vault: MemoryAccountVault())
+        try session.add([account("1"), account("2")])
+        let captured = try #require(session.account(for: .main))
+        try session.assign("2")
+        #expect(captured.cookies.bili_jct == "csrf-1")
+        #expect(captured.cookieString.contains("session-1"))
+        #expect(captured.accessKey == "token-1")
+    }
+}

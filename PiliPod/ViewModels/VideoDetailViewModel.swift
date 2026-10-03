@@ -825,7 +825,7 @@ class VideoDetailViewModel {
 
     @MainActor
     func loadDanmakuSegment(cid: Int? = nil, segmentIndex: Int = 1) async {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         let targetCid = cid ?? self.cid
         guard targetCid > 0 else {
             danmakuError = "无效的 cid"
@@ -996,7 +996,7 @@ class VideoDetailViewModel {
 
     @MainActor
     func preloadDanmakuIfNeeded(currentTime: Double) async {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         let targetCid = cid
         guard targetCid > 0 else { return }
 
@@ -1336,7 +1336,7 @@ class VideoDetailViewModel {
     // MARK: - History Report
 
 	    func startHistoryReporting() {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         historyReportStartTask?.cancel()
         historyReportTimer?.invalidate()
         historyReportTimer = nil
@@ -1358,7 +1358,7 @@ class VideoDetailViewModel {
 	    }
 
     private func reportHistoryIfNeeded(with player: MPVKitPlayer) {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         let currentProgress = Int(player.currentTime)
 
         // 如果进度有改变，才上报
@@ -1381,7 +1381,7 @@ class VideoDetailViewModel {
         historyReportTimer?.invalidate()
         historyReportTimer = nil
 
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
 
         // 退出时最后上报一次
         let finalProgress = Int(player.currentTime)

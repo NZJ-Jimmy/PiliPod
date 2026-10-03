@@ -80,7 +80,7 @@ struct AboutView: View {
                     prepareLoginExport()
                 }
                 .foregroundStyle(.primary)
-                .disabled(!loginSession.isLogin)
+                .disabled(loginSession.accounts.isEmpty)
             }
 
             Section {
@@ -174,30 +174,21 @@ struct AboutView: View {
     }
 
     private func prepareLoginExport() {
-        guard let cookies = loginSession.cookies else { return }
-
-        let uid = cookies.DedeUserID
-        let loginType: [Int] = loginSession.type ?? [0, 1, 2, 3]
-
-        let cookieDict: [String: String] = [
-            "SESSDATA": cookies.SESSDATA,
-            "bili_jct": cookies.bili_jct,
-            "DedeUserID": cookies.DedeUserID,
-            "DedeUserID__ckMd5": "",
-            "sid": cookies.sid ?? "",
-            "buvid3": cookies.buvid3 ?? ""
-        ]
-
-        let userDict: [String: Any] = [
-            "cookies": cookieDict,
-            "accessKey": loginSession.accessKey ?? "",
-            "refresh": loginSession.refresh ?? "",
-            "type": loginType
-        ]
-
-        let payload: [String: Any] = [
-            uid: userDict
-        ]
+        let state = loginSession.snapshot
+        guard !state.accounts.isEmpty else { return }
+        let uid = "accounts"
+        var payload: [String: Any] = [:]
+        for account in state.accounts {
+            let c = account.cookies
+            let roles = AccountRole.allCases.enumerated().compactMap { index, role in
+                state.assignments[role] == account.id ? index : nil
+            }
+            payload[account.id] = [
+                "cookies": ["SESSDATA": c.SESSDATA, "bili_jct": c.bili_jct,
+                    "DedeUserID": c.DedeUserID, "sid": c.sid ?? "", "buvid3": c.buvid3 ?? ""],
+                "accessKey": account.accessKey ?? "", "refresh": account.refresh ?? "", "type": roles
+            ]
+        }
 
         do {
             let data = try JSONSerialization.data(

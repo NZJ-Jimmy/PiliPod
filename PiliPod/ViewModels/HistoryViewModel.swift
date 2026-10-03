@@ -30,6 +30,15 @@ final class HistoryViewModel: ObservableObject {
             await Task.yield()
         }
 
+        guard LoginSession.shared.account(for: .history) != nil else {
+            videos = []
+            nextCursor = nil
+            hasMore = false
+            errorMessage = "记录观看账号为匿名，请在账号与隐私设置中选择账号。"
+            return
+        }
+        videos = []
+        nextCursor = nil
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }

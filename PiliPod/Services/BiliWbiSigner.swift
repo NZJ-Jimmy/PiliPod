@@ -171,7 +171,8 @@ actor BiliWbiSigner {
             forHTTPHeaderField: "User-Agent"
         )
 
-        let cookie = LoginSession.shared.cookieString
+        request.httpShouldHandleCookies = false
+        let cookie = ""
         if !cookie.isEmpty {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")
         }

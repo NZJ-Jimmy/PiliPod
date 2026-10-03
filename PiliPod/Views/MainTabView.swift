@@ -29,7 +29,7 @@ struct MainTabView: View {
                     Text("首页")
                 }
 
-            DynamicView()
+            DynamicView().id(loginSession.selectedID(for: .main))
                 .tag(MainTab.dynamic)
                 .tabItem {
                     Image("DynamicIcon")
@@ -45,8 +45,10 @@ struct MainTabView: View {
                 }
         }
         .toolbar(.visible, for: .tabBar)
-        .task {
+        .task(id: loginSession.selectedID(for: .main)) {
+            homeViewModel.userFace = nil
             await homeViewModel.loadUserIfNeeded()
+            await homeViewModel.loadUnreadMessageCount(force: true)
         }
         .task(id: homeViewModel.userFace) {
             guard let face = homeViewModel.userFace,
