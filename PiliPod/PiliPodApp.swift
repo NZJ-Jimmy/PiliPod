@@ -68,6 +68,8 @@ struct PiliPodApp: App {
 #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--uitest-video-detail-gestures") {
                 VideoDetailGestureTestRoot()
+            } else if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
+                LibraryLayoutFixtureView()
             } else {
                 MainTabView()
             }

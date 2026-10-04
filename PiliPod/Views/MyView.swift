@@ -14,37 +14,63 @@ struct MyView: View {
     @State private var showHistory = false
     @State private var showWatchLater = false
     @State private var showOfflineCache = false
+    @State private var showSubscriptions = false
+    @State private var showFavorites = false
     @State private var followingRoute: MyFollowingRoute?
+    @Namespace private var libraryNamespace
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // 顶部按钮
-                HStack {
-                    NavigationLink { AccountSettingsView() } label: {
-                        Label(loginSession.incognito ? "无痕模式" : "账号", systemImage: loginSession.incognito ? "eye.slash" : "person.2")
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 顶部按钮
+                    HStack {
+                        NavigationLink { AccountSettingsView() } label: {
+                            Label(loginSession.incognito ? "无痕模式" : "账号", systemImage: loginSession.incognito ? "eye.slash" : "person.2")
+                        }
+                        Spacer()
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "gear")
+                                .frame(width: 20, height: 20)
+                                .padding(10)
+                        }
+                        .tint(.primary)
+                        .glassEffect(.regular.interactive(), in: .circle)
                     }
-                    Spacer()
-                    NavigationLink {
-                        SettingsView()
+                    .padding(.horizontal, 30)
+                    .padding(.top, 10)
+
+                    headerView
+                        .padding(.horizontal, 30)
+
+                    quickActionRow
+                        .padding(.horizontal, 30)
+
+                    Button {
+                        showFavorites = true
                     } label: {
-                        Image(systemName: "gear")
-                            .frame(width: 20, height: 20)
-                            .padding(10)
+                        HStack(spacing: 12) {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(Color("BiliPink"))
+                            Text("我的收藏").font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        .padding(18)
+                        .foregroundStyle(.primary)
+                        .contentShape(Rectangle())
                     }
-                    .tint(.primary)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("我的收藏")
+                    .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18))
+                    .matchedTransitionSource(id: "my.favorites", in: libraryNamespace)
+                    .padding(.horizontal, 30)
+
+                    Spacer()
                 }
-                .padding(.horizontal, 30)
-                .padding(.top, 10)
-
-                headerView
-                    .padding(.horizontal, 30)
-
-                quickActionRow
-                    .padding(.horizontal, 30)
-
-                Spacer()
             }
             .task(id: loginSession.selectedID(for: .main)) {
                 viewModel.user = nil
@@ -62,6 +88,14 @@ struct MyView: View {
             }
             .navigationDestination(isPresented: $showWatchLater) {
                 WatchLaterView().id(loginSession.selectedID(for: .main))
+            }
+            .navigationDestination(isPresented: $showSubscriptions) {
+                LibraryFoldersView(subscriptions: true)
+                    .navigationTransition(.zoom(sourceID: "my.subscriptions", in: libraryNamespace))
+            }
+            .navigationDestination(isPresented: $showFavorites) {
+                LibraryFoldersView(subscriptions: false)
+                    .navigationTransition(.zoom(sourceID: "my.favorites", in: libraryNamespace))
             }
             .navigationDestination(item: $followingRoute) { route in
                 FollowingListView(mid: route.mid)
@@ -193,6 +227,13 @@ struct MyView: View {
             )
 
             quickActionButton(
+                title: "我的订阅",
+                systemImage: "rectangle.stack.badge.person.crop",
+                action: { showSubscriptions = true }
+            )
+            .matchedTransitionSource(id: "my.subscriptions", in: libraryNamespace)
+
+            quickActionButton(
                 title: L10n.string("稍后再看"),
                 systemImage: "clock.badge",
                 action: { showWatchLater = true }
@@ -266,6 +307,7 @@ struct MyView: View {
             .frame(height: 72)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(title)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
