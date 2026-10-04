@@ -67,6 +67,7 @@ struct ConversationPanel<Content: View>: View {
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
         .padding(.horizontal, 6)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("conversation.panel")
     }
 }

@@ -272,7 +272,6 @@ class BiliAPI {
             let result = try Bilibili_Im_Interface_V1_RspSendMsg(serializedBytes: payload)
             guard result.msgKey > 0 else { throw APIError.requestFailed }
             message.msgKey = result.msgKey
-            if !result.msgContent.isEmpty { message.content = result.msgContent }
             return PrivateMessageSendResult(message: message, emotions: result.eInfos)
         }
         // Cookie-only logins use the web endpoint; never resend automatically after an ambiguous failure.

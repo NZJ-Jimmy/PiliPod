@@ -315,7 +315,6 @@ struct MessageConversationView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .accessibilityIdentifier("conversation.inputCapsule")
 
             Button {
                 isEmotePanelShown.toggle()
@@ -337,7 +336,6 @@ struct MessageConversationView: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 10 + (isPanelShown || keyboard.isVisible ? 0 : keyboard.bottomInset))
-        .accessibilityIdentifier("conversation.composer")
     }
 
     private var photoPanel: some View {
@@ -357,7 +355,6 @@ struct MessageConversationView: View {
                 .photosPickerAccessoryVisibility(isPanelExpanded ? .visible : .hidden, edges: .all)
                 .disabled(isPreparingPhoto || isSending)
         }
-        .accessibilityIdentifier("conversation.photos")
     }
 
     private var emotePanel: some View {
@@ -505,12 +502,14 @@ struct MessageConversationView: View {
                 pendingPhotos.removeFirst()
                 uploadedPhotos[photo.id] = nil
               }
+              await refreshMessagesAfterSending()
               return
             } else {
                 result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
                 inputText = ""
             }
             appendSentMessage(result)
+            await refreshMessagesAfterSending()
         } catch {
             sendError = "\(error.localizedDescription)\n内容已保留，可稍后重试。若网络超时，请先确认对方是否已收到。"
             ErrorLogService.record(error, context: "发送私信")
@@ -524,6 +523,23 @@ struct MessageConversationView: View {
             }
             errorMessage = nil
             scrollToBottomID = result.message.msgKey
+    }
+
+    private func refreshMessagesAfterSending() async {
+        do {
+            let fetched = try await BiliAPI.shared.fetchPrivateMessageMessages(
+                talkerID: session.talkerID, sessionType: session.sessionType)
+                .filter { !$0.sysCancel && $0.msgStatus != 2 }
+            var merged = Dictionary(messages.map { ($0.msgKey, $0) }, uniquingKeysWith: { _, latest in latest })
+            for message in fetched { merged[message.msgKey] = message }
+            messages = merged.values.sorted {
+                if $0.timestamp == $1.timestamp { return $0.msgKey < $1.msgKey }
+                return $0.timestamp < $1.timestamp
+            }
+        } catch {
+            // Sending already succeeded; a failed history refresh must not offer a duplicate resend.
+            ErrorLogService.record(error, context: "发送后同步私信")
+        }
     }
 
     private func loadMessages() async {
