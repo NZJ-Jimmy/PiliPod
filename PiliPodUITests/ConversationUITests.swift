@@ -34,7 +34,11 @@ final class ConversationUITests: XCTestCase {
 
         app.buttons["选择照片"].tap()
         XCTAssertTrue(app.staticTexts["照片"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.collectionViews.firstMatch.waitForExistence(timeout: 25), "Native photo grid should load")
+        // The native picker runs in a remote view service and shows onboarding on first use.
+        let onboarding = app.buttons["OK"]
+        if onboarding.waitForExistence(timeout: 10) { onboarding.tap() }
+        let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+        XCTAssertTrue(photo.waitForExistence(timeout: 25), "Native photo thumbnails should load")
         capture(app, "conversation-photos")
     }
 
