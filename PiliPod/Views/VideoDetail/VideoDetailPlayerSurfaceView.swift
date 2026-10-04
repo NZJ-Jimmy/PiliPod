@@ -135,12 +135,6 @@ struct VideoDetailPlayerSurfaceView: View {
         max(0, playerHeight - topGestureExclusionHeight - bottomGestureExclusionHeight)
     }
 
-    private var gestureLockLeadingPadding: CGFloat {
-        // The fullscreen canvas extends beyond the safe area. Reserve the
-        // cutout inset explicitly for this control in either landscape direction.
-        12 + (isFullscreen ? max(safeAreaInsets.leading, safeAreaInsets.trailing) : 0)
-    }
-
     var body: some View {
         ZStack(alignment: .center) {
             playerLayer
@@ -183,10 +177,10 @@ struct VideoDetailPlayerSurfaceView: View {
             PlayerSpeedBoostTouchView(
                 onTouchDown: { location in
                     let playerY = location.y + (playerHeight - gestureHitAreaHeight) / 2
-                    let lockButtonX = (playerWidth - containerSize.width) / 2 + gestureLockLeadingPadding
+                    let lockButtonX = (playerWidth - containerSize.width) / 2 + PlayerControlsLayout.padding
                     let isOverLockButton = controlsVisible &&
-                        location.x >= lockButtonX && location.x <= lockButtonX + 44 &&
-                        abs(playerY - playerHeight / 2) <= 22
+                        location.x >= lockButtonX && location.x <= lockButtonX + PlayerControlsLayout.leadingButtonSize &&
+                        abs(playerY - playerHeight / 2) <= PlayerControlsLayout.leadingButtonSize / 2
                     guard !areGesturesLocked, !isOverLockButton else { return }
                     let isOverVisibleControls = controlsVisible && (
                         playerY < max(72, safeAreaInsets.top + 56) ||
@@ -340,18 +334,14 @@ struct VideoDetailPlayerSurfaceView: View {
     @ViewBuilder
     private var gestureLockOverlay: some View {
         if controlsVisible {
-            Button(action: toggleGestureLock) {
-                Image(systemName: areGesturesLocked ? "lock.fill" : "lock.open.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-            }
-            .background(Circle().fill(Color.black.opacity(0.35)))
-            .glassEffect(.clear.interactive(), in: .circle)
-            .accessibilityLabel(areGesturesLocked ? "解锁播放手势" : "锁定播放手势")
+            PlayerLeadingControlButton(
+                systemName: areGesturesLocked ? "lock.fill" : "lock.open.fill",
+                accessibilityLabel: areGesturesLocked ? "解锁播放手势" : "锁定播放手势",
+                action: toggleGestureLock
+            )
             .accessibilityValue(areGesturesLocked ? "已锁定" : "未锁定")
-            .padding(.leading, gestureLockLeadingPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding(.leading, PlayerControlsLayout.padding)
+            .frame(width: containerSize.width, height: playerHeight, alignment: .leading)
             .transition(.opacity)
         }
     }

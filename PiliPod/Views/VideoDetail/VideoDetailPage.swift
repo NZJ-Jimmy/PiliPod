@@ -3381,6 +3381,29 @@ struct PlayerLoadingOverlay: View {
     }
 }
 
+enum PlayerControlsLayout {
+    static let leadingButtonSize: CGFloat = 40
+    static let padding: CGFloat = 12
+}
+
+struct PlayerLeadingControlButton: View {
+    let systemName: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: PlayerControlsLayout.leadingButtonSize, height: PlayerControlsLayout.leadingButtonSize)
+        }
+        .background(Circle().fill(Color.black.opacity(0.2)))
+        .glassEffect(.clear.interactive(), in: .circle)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
 struct PlayerControlsOverlay: View {
     @Binding var danmakuEnabled: Bool
 
@@ -3440,20 +3463,10 @@ struct PlayerControlsOverlay: View {
         ZStack(alignment: .top) {
             HStack(spacing: 12) {
                 // 左上角返回
-                Button(action: {
+                PlayerLeadingControlButton(systemName: "chevron.left", accessibilityLabel: "返回") {
                     onUserInteracted()
                     onBack()
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 40, height: 40)
                 }
-                .background(Circle().fill(Color(.black.opacity(0.2))))
-                .glassEffect(
-                    .clear.interactive(),
-                    in: .circle
-                )
 
                 // 视频标题
                 if(isFullscreen){
@@ -3556,7 +3569,7 @@ struct PlayerControlsOverlay: View {
                 )
                 .equatable()
             }
-            .padding(12)
+            .padding(PlayerControlsLayout.padding)
             if isFullscreen {
                 LandscapeSystemStatusView()
                     .frame(maxWidth: .infinity)
