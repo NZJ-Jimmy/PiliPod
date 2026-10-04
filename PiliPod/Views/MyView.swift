@@ -264,7 +264,7 @@ struct MyView: View {
                     .contentShape(Rectangle())
                 }
                 .accessibilityLabel("\(section.title)，查看全部")
-                .accessibilityIdentifier(section.title)
+                .accessibilityIdentifier("my.all.\(section.rawValue)")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)

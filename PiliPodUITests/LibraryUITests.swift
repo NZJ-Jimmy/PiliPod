@@ -56,13 +56,13 @@ final class LibraryUITests: XCTestCase {
         let mine = app.tabBars.buttons["我的"]
         XCTAssertTrue(mine.waitForExistence(timeout: 15))
         mine.tap()
-        let subscriptions = app.buttons["我的订阅"]
+        let subscriptions = app.buttons["my.all.subscriptions"]
         XCTAssertTrue(subscriptions.waitForExistence(timeout: 5))
         subscriptions.tap()
         XCTAssertTrue(app.navigationBars["我的订阅"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["登录"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        let favorites = app.buttons["我的收藏"]
+        let favorites = app.buttons["my.all.favorites"]
         for _ in 0..<4 {
             if favorites.isHittable { break }
             app.swipeUp()
@@ -97,7 +97,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(history.value as? String, "已展开")
         history.tap()
         XCTAssertEqual(history.value as? String, "已收起")
-        app.buttons["观看记录"].tap()
+        app.buttons["my.all.history"].tap()
         XCTAssertTrue(app.navigationBars["观看记录"].waitForExistence(timeout: 5))
     }
 }
