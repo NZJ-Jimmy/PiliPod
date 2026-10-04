@@ -18,6 +18,7 @@ struct MessageConversationView: View {
     @State private var isPanelExpanded = false
     @State private var panelDismissal: CGFloat = 0
     @State private var panelTop: CGFloat = 0
+    @State private var composerHeight: CGFloat = 62
     @State private var presentedImage: PrivateMessageImagePayload?
     @FocusState private var isInputFocused: Bool
     @State private var selectedVideo: VideoItem?
@@ -47,8 +48,9 @@ struct MessageConversationView: View {
 
             if session.sessionType == 1 {
                 composer
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { composerHeight = $0 }
                 if isPanelShown {
-                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: geometry.size.height * 0.78,
+                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: max(0, min(geometry.size.height * 0.78, geometry.size.height - composerHeight - 44)),
                         expanded: $isPanelExpanded, dismissal: panelDismissal, onDismiss: dismissPanel) {
                         if inputPanel == .photos { composer.photoPanel }
                         else { composer.emotePanel }

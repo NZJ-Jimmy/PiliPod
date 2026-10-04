@@ -63,9 +63,11 @@ struct MessageComposer: View {
                                     .frame(width: 30, height: 30)
                                     .background(Color.blue, in: Circle())
                                     .frame(width: 44, height: 44).contentShape(Rectangle())
+                                    .accessibilityHidden(true)
                             }
                             .buttonStyle(.plain)
                             .accessibilityElement(children: .ignore)
+                            .accessibilityAddTraits(.isButton)
                             .disabled(model.isSending || model.isPreparingPhoto || model.isLoading || !model.canSend)
                             .accessibilityLabel(model.isSending ? "发送中" : "发送消息")
                             .accessibilityIdentifier("conversation.send")
@@ -186,9 +188,11 @@ struct MessageComposer: View {
                                             .symbolRenderingMode(.palette).foregroundStyle(.white, .black.opacity(0.6))
                                             .font(.title3)
                                             .frame(width: 44, height: 44).contentShape(Rectangle())
+                                            .accessibilityHidden(true)
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityElement(children: .ignore)
+                                    .accessibilityAddTraits(.isButton)
                                     .accessibilityLabel("移除图片")
                                 }
                             }

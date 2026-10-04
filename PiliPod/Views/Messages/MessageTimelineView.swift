@@ -83,7 +83,7 @@ struct MessageTimelineView: View {
                     geometry.contentSize.height + geometry.contentInsets.bottom - 24)
         } action: { old, new in
             snapshot = new
-            if isUserScrolling && old.height == new.height && historyAnchor == nil {
+            if isUserScrolling && old.height == new.height && old.contentHeight == new.contentHeight && historyAnchor == nil {
                 followsLatest = new.atBottom
             }
             if followsLatest, historyAnchor == nil, dragBoundary == nil,

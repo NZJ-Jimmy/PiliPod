@@ -46,6 +46,7 @@
 | PiliPod/Views/Messages/MessageComposer.swift | 输入、原生连续选图、预览和表情 |
 | PiliPod/Views/Messages/BiliMessageCard.swift | 独立 Bilibili 分享卡片 |
 | PiliPod/Components/ConversationPanel.swift | 面板支持减少动态效果偏好 |
+| PiliPod/Components/PrivateMessageText.swift | B站内嵌表情随 Dynamic Type 缩放并重新生成，取消旧加载后不覆盖新结果 |
 | PiliPod/Components/PrivateMessagePhoto.swift | 按比例展示图片，缓存已选照片的解码结果 |
 | PiliPod/Models/ConversationUITestFixture.swift | 仅 DEBUG 的离线界面测试数据及外观 |
 | PiliPodTests/MessagePresentationTests.swift | 分组、时间、类型映射、身份及去重测试 |
