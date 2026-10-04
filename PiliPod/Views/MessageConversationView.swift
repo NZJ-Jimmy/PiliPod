@@ -72,6 +72,8 @@ struct MessageConversationView: View {
                         else { emotePanel }
                     }
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("conversation")).minY } action: { panelTop = $0 }
+                    // SwiftUI already reserves the visible keyboard; the panel shares that space while switching.
+                    .padding(.bottom, -keyboard.overlap)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
