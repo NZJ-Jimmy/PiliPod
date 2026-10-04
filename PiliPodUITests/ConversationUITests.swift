@@ -19,7 +19,9 @@ final class ConversationUITests: XCTestCase {
         XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
         let keyboardInputY = input.frame.maxY
         let latest = app.staticTexts["多行输入和面板布局测试"]
-        XCTAssertTrue(latest.isHittable, "Opening the keyboard must keep the latest message visible")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: latest)], timeout: 5), .completed,
+            "Opening the keyboard must keep the latest message visible")
+        capture(app, "conversation-keyboard-before-send")
         send.tap()
         XCTAssertTrue(input.isEnabled, "Sending must keep the input enabled to retain keyboard focus")
         let cleared = NSPredicate(format: "value == %@ OR value == %@", "消息", "")
@@ -50,7 +52,10 @@ final class ConversationUITests: XCTestCase {
         if onboarding.waitForExistence(timeout: 10) { onboarding.tap() }
         let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
         XCTAssertTrue(photo.waitForExistence(timeout: 25), "Native photo thumbnails should load")
-        photo.tap()
+        capture(app, "conversation-photos-before-selection")
+        // Native grid image accessibility nodes have no hittable point; tap their actual on-screen center.
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: photo.frame.midX, dy: photo.frame.midY)).tap()
         XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 15), "Selecting a photo must immediately add it to the composer")
         XCTAssertTrue(panel.exists, "Continuous selection must keep the picker open")
         XCTAssertFalse(app.buttons["添加 1 张"].exists)

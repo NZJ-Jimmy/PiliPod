@@ -29,6 +29,7 @@ struct MessageConversationView: View {
     @State private var panelTop: CGFloat = 0
     @State private var conversationDragBoundary: CGFloat?
     @State private var followsLatestMessage = true
+    @State private var isUserScrolling = false
     @State private var isPreparingPhoto = false
     @State private var photoStatus: String?
     @State private var presentedImage: PrivateMessageImagePayload?
@@ -236,13 +237,16 @@ struct MessageConversationView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("conversation.messages")
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .onScrollPhaseChange { _, phase in
+                    isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
+                }
                 .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
                     ConversationScrollSnapshot(height: geometry.containerSize.height,
                         atBottom: geometry.contentOffset.y + geometry.containerSize.height >=
                             geometry.contentSize.height + geometry.contentInsets.bottom - 24)
                 } action: { old, new in
                     // Resizing for a keyboard/panel must not be mistaken for scrolling away.
-                    if old.height == new.height { followsLatestMessage = new.atBottom }
+                    if isUserScrolling && old.height == new.height { followsLatestMessage = new.atBottom }
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
                     if followsLatestMessage, conversationDragBoundary == nil, let last = messages.last {
@@ -584,6 +588,7 @@ struct MessageConversationView: View {
                     message.msgType = .enMsgTypeText
                     message.content = String(decoding: try JSONEncoder().encode(["content": text]), as: UTF8.self)
                     messages.append(message)
+                    followsLatestMessage = true
                     if inputText == text { inputText = "" }
                     scrollToBottomID = message.msgKey
                     return
@@ -601,6 +606,7 @@ struct MessageConversationView: View {
     }
 
     private func appendSentMessage(_ result: PrivateMessageSendResult) {
+            followsLatestMessage = true
             for emotion in result.emotions { emotionURLs[emotion.text] = emotion.url }
             if !messages.contains(where: { $0.msgKey == result.message.msgKey }) {
                 messages.append(result.message)
