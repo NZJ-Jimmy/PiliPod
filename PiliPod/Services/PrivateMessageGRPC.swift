@@ -5,6 +5,7 @@ enum PrivateMessageGRPC {
     static func headers(accessKey: String, buvid: String, sessionID: String) -> [String: String] {
         let metadata = protobuf(strings: [1: accessKey, 2: "android_hd", 3: "android", 5: "master", 6: buvid, 7: "android"], integers: [4: 2001100])
         let device = protobuf(strings: [3: buvid, 4: "android_hd", 5: "android", 7: "master", 8: "android", 9: "android", 10: "15", 13: "2.0.1"], integers: [1: 5, 2: 2001100])
+        let locale = protobuf(strings: [1: "zh", 2: "Hans", 3: "CN"])
         return [
             "Authorization": "identify_v1 \(accessKey)",
             "User-Agent": "Mozilla/5.0 BiliDroid/2.0.1 (bbcallen@gmail.com) os/android mobi_app/android_hd build/2001100 channel/master",
@@ -13,13 +14,14 @@ enum PrivateMessageGRPC {
             "x-bili-device-bin": device.base64EncodedString(),
             "x-bili-fawkes-req-bin": protobuf(strings: [1: "android_hd", 2: "prod", 3: sessionID]).base64EncodedString(),
             "x-bili-network-bin": protobuf(integers: [1: 1]).base64EncodedString(),
+            "x-bili-locale-bin": protobuf(strings: [4: "Asia/Shanghai"], bytes: [1: locale, 2: locale]).base64EncodedString(),
             "grpc-accept-encoding": "identity"
         ]
     }
 
-    static func protobuf(strings: [Int: String] = [:], integers: [Int: UInt64] = [:]) -> Data {
+    static func protobuf(strings: [Int: String] = [:], integers: [Int: UInt64] = [:], bytes: [Int: Data] = [:]) -> Data {
         var data = Data()
-        for field in Set(strings.keys).union(integers.keys).sorted() {
+        for field in Set(strings.keys).union(integers.keys).union(bytes.keys).sorted() {
             if let value = strings[field], !value.isEmpty {
                 let bytes = Data(value.utf8)
                 data.append(varint(UInt64(field << 3 | 2)))
@@ -28,6 +30,10 @@ enum PrivateMessageGRPC {
             } else if let value = integers[field] {
                 data.append(varint(UInt64(field << 3)))
                 data.append(varint(value))
+            } else if let value = bytes[field] {
+                data.append(varint(UInt64(field << 3 | 2)))
+                data.append(varint(UInt64(value.count)))
+                data.append(value)
             }
         }
         return data

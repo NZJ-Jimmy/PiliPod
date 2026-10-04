@@ -5,6 +5,10 @@ import Combine
 @MainActor
 final class ConversationKeyboard: ObservableObject {
     @Published var lastHeight: CGFloat = 320
+    @Published var isVisible = false
+    var bottomInset: CGFloat {
+        PiliPodAppDelegate.activeWindowScene?.windows.first(where: \.isKeyWindow)?.safeAreaInsets.bottom ?? 0
+    }
     private var observer: NSObjectProtocol?
 
     init() {
@@ -15,6 +19,7 @@ final class ConversationKeyboard: ObservableObject {
                 guard let window = PiliPodAppDelegate.activeWindowScene?.windows.first(where: \.isKeyWindow) else { return }
                 let converted = window.convert(frame, from: window.screen.coordinateSpace)
                 let height = window.bounds.intersection(converted).height
+                self?.isVisible = height > 100
                 if height > 100 { self?.lastHeight = height }
             }
         }
@@ -49,7 +54,13 @@ struct ConversationPanel<Content: View>: View {
                         }
                     })
                 .accessibilityLabel("展开或收起面板")
-                .accessibilityAdjustableAction { direction in expanded = direction == .increment }
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: expanded = true
+                    case .decrement: expanded = false
+                    @unknown default: break
+                    }
+                }
             content.frame(maxHeight: .infinity)
         }
         .frame(height: min(maximumHeight, max(220, (expanded ? maximumHeight : height) - drag)))

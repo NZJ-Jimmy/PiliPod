@@ -336,7 +336,7 @@ struct MessageConversationView: View {
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
-        .padding(.bottom, 10)
+        .padding(.bottom, 10 + (isPanelShown || keyboard.isVisible ? 0 : keyboard.bottomInset))
         .accessibilityIdentifier("conversation.composer")
     }
 
