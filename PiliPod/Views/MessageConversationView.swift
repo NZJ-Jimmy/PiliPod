@@ -22,8 +22,13 @@ struct MessageConversationView: View {
     @State private var pendingPhotos: [PrivateMessagePhoto] = []
     @State private var uploadedPhotos: [UUID: PrivateMessageImagePayload] = [:]
     @State private var photoSelections: [PhotosPickerItem] = []
+    @State private var preparedPhotoSelections: [(item: PhotosPickerItem, photo: PrivateMessagePhoto)] = []
     @State private var isPhotoPanelShown = false
     @State private var isPanelExpanded = false
+    @State private var panelDismissal: CGFloat = 0
+    @State private var panelTop: CGFloat = 0
+    @State private var conversationDragBoundary: CGFloat?
+    @State private var followsLatestMessage = true
     @State private var isPreparingPhoto = false
     @State private var photoStatus: String?
     @State private var presentedImage: PrivateMessageImagePayload?
@@ -59,27 +64,27 @@ struct MessageConversationView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if session.sessionType == 1 {
-                if let pendingPhoto { photoPreview(pendingPhoto) }
                 composer
                 if isPanelShown {
                     ConversationPanel(height: keyboard.lastHeight, maximumHeight: geometry.size.height * 0.78,
-                        expanded: $isPanelExpanded) {
+                        expanded: $isPanelExpanded, dismissal: panelDismissal, onDismiss: dismissPanel) {
                         if isPhotoPanelShown { photoPanel }
                         else { emotePanel }
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("conversation")).minY } action: { panelTop = $0 }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
           }
         }
         .background(Color(.systemBackground))
+        .coordinateSpace(name: "conversation")
         .ignoresSafeArea(.container, edges: .bottom)
         .safeAreaInset(edge: .top, spacing: 0) { conversationNavigationHeader }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar(.hidden, for: .navigationBar)
-        .animation(.snappy(duration: 0.25), value: isPanelShown)
         .navigationDestination(item: $selectedUserMID) { mid in
             UserSpaceView(mid: mid)
         }
@@ -115,6 +120,7 @@ struct MessageConversationView: View {
         .onChange(of: isInputFocused) { _, focused in
             if focused { isEmotePanelShown = false; isPhotoPanelShown = false; isPanelExpanded = false }
         }
+        .task(id: photoSelections) { await preparePhotos() }
         .sheet(isPresented: Binding(get: { presentedImage != nil }, set: { if !$0 { presentedImage = nil } })) {
             NavigationStack {
                 if let payload = presentedImage {
@@ -226,11 +232,46 @@ struct MessageConversationView: View {
                 }
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("conversation.messages")
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
+                    ConversationScrollSnapshot(height: geometry.containerSize.height,
+                        atBottom: geometry.contentOffset.y + geometry.containerSize.height >=
+                            geometry.contentSize.height + geometry.contentInsets.bottom - 24)
+                } action: { old, new in
+                    // Resizing for a keyboard/panel must not be mistaken for scrolling away.
+                    if old.height == new.height { followsLatestMessage = new.atBottom }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
+                    if followsLatestMessage, conversationDragBoundary == nil, let last = messages.last {
+                        Task { @MainActor in
+                            await Task.yield()
+                            if followsLatestMessage, conversationDragBoundary == nil {
+                                proxy.scrollTo(last.msgKey, anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+                .simultaneousGesture(DragGesture(coordinateSpace: .named("conversation"))
+                    .onChanged { value in
+                        guard isPanelShown, value.translation.height > 0 else { return }
+                        if conversationDragBoundary == nil { conversationDragBoundary = panelTop }
+                        let distance = max(0, value.location.y - (conversationDragBoundary ?? panelTop))
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { panelDismissal = distance }
+                    }
+                    .onEnded { value in
+                        guard conversationDragBoundary != nil else { return }
+                        let projected = panelDismissal + max(0, value.predictedEndTranslation.height - value.translation.height)
+                        withAnimation(.smooth(duration: 0.25)) {
+                            if panelDismissal > 0 && projected > 80 { dismissPanel() }
+                            panelDismissal = 0
+                            conversationDragBoundary = nil
+                        }
+                    })
                 .onChange(of: scrollToBottomID) { _, key in
                     if let key { withAnimation { proxy.scrollTo(key, anchor: .bottom) } }
-                }
-                .onChange(of: isEmotePanelShown) { _, _ in
-                    if let last = messages.last { proxy.scrollTo(last.msgKey, anchor: .bottom) }
                 }
                 .onAppear {
                     if let last = messages.last {
@@ -274,22 +315,26 @@ struct MessageConversationView: View {
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
-                isPhotoPanelShown.toggle()
-                isEmotePanelShown = false
-                isPanelExpanded = false
-                isInputFocused = false
+                withAnimation(.smooth(duration: 0.25)) {
+                    isPhotoPanelShown.toggle()
+                    isEmotePanelShown = false
+                    isPanelExpanded = false
+                    panelDismissal = 0
+                    isInputFocused = false
+                }
             } label: {
-                if isPreparingPhoto { ProgressView().frame(width: 38, height: 38) }
-                else { Image(systemName: "plus").font(.system(size: 20)).frame(width: 38, height: 38) }
+                if isPreparingPhoto { ProgressView().frame(width: 44, height: 44) }
+                else { Image(systemName: "plus").font(.system(size: 20)).frame(width: 44, height: 44) }
             }
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
             .disabled(isSending || isPreparingPhoto || isLoading || !canSend)
             .accessibilityLabel("选择照片")
-            HStack(alignment: .bottom, spacing: 8) {
+            VStack(spacing: 0) {
+              if !pendingPhotos.isEmpty { photoPreview }
+              HStack(alignment: .bottom, spacing: 8) {
                 TextField("消息", text: $inputText, axis: .vertical)
                     .focused($isInputFocused)
-                    .disabled(isSending)
                     .lineLimit(1 ... 4)
                     .font(.body)
                     .frame(minHeight: 30)
@@ -314,18 +359,22 @@ struct MessageConversationView: View {
                 }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
+            }
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
             Button {
-                isEmotePanelShown.toggle()
-                isPhotoPanelShown = false
-                isPanelExpanded = false
-                isInputFocused = !isEmotePanelShown
+                withAnimation(.smooth(duration: 0.25)) {
+                    isEmotePanelShown.toggle()
+                    isPhotoPanelShown = false
+                    isPanelExpanded = false
+                    panelDismissal = 0
+                    isInputFocused = !isEmotePanelShown
+                }
                 if isEmotePanelShown { Task { await loadEmotes() } }
             } label: {
                 Image(systemName: isEmotePanelShown ? "keyboard" : "face.smiling")
                     .font(.system(size: 17, weight: .medium))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .disabled(isSending)
@@ -339,22 +388,11 @@ struct MessageConversationView: View {
     }
 
     private var photoPanel: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("照片").font(.headline)
-                Spacer()
-                Button(photoSelections.isEmpty ? "完成" : "添加 \(photoSelections.count) 张") {
-                    Task { await preparePhotos() }
-                }
-                .disabled(isPreparingPhoto || isSending)
-            }
-            .padding(.horizontal, 18).padding(.bottom, 8)
-            PhotosPicker(selection: $photoSelections, maxSelectionCount: 50, matching: .images,
+            PhotosPicker(selection: $photoSelections, maxSelectionCount: 50, selectionBehavior: .continuous, matching: .images,
                 preferredItemEncoding: .compatible) { EmptyView() }
                 .photosPickerStyle(.inline)
-                .photosPickerAccessoryVisibility(isPanelExpanded ? .visible : .hidden, edges: .all)
-                .disabled(isPreparingPhoto || isSending)
-        }
+                .photosPickerAccessoryVisibility(.hidden, edges: .all)
+                .disabled(isSending)
     }
 
     private var emotePanel: some View {
@@ -434,48 +472,78 @@ struct MessageConversationView: View {
         }
     }
 
-    private func photoPreview(_ photo: PrivateMessagePhoto) -> some View {
-        HStack(spacing: 12) {
-            Image(uiImage: photo.image).resizable().scaledToFit().frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(photoStatus ?? "已选 \(pendingPhotos.count) 张图片").font(.subheadline)
-                Text("图片将单独发送，文字草稿保留").font(.caption).foregroundStyle(.secondary)
+    private var photoPreview: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(pendingPhotos) { photo in
+                        Image(uiImage: photo.image).resizable().scaledToFill().frame(width: 72, height: 72)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(alignment: .topTrailing) {
+                                if !isSending {
+                                    Button { removePhoto(photo) } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .symbolRenderingMode(.palette).foregroundStyle(.white, .black.opacity(0.6))
+                                            .font(.system(size: 22))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("移除图片")
+                                }
+                            }
+                    }
+                }
             }
-            Spacer()
-            if isSending { ProgressView() }
-            else {
-                Button {
-                    pendingPhotos = []
-                    uploadedPhotos = [:]
-                } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
-                .accessibilityLabel("移除图片")
-            }
+            .scrollIndicators(.hidden)
+            Text(photoStatus ?? "已选 \(pendingPhotos.count) 张图片")
+                .font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("conversation.photo-count")
         }
-        .padding(12)
+        .padding(.horizontal, 12).padding(.top, 10)
+    }
+
+    private func removePhoto(_ photo: PrivateMessagePhoto) {
+        if let selection = preparedPhotoSelections.first(where: { $0.photo.id == photo.id }) {
+            photoSelections.removeAll { $0 == selection.item }
+        }
+        preparedPhotoSelections.removeAll { $0.photo.id == photo.id }
+        pendingPhotos.removeAll { $0.id == photo.id }
+        uploadedPhotos[photo.id] = nil
+    }
+
+    private func dismissPanel() {
+        isPhotoPanelShown = false
+        isEmotePanelShown = false
+        isPanelExpanded = false
+        panelDismissal = 0
     }
 
     @MainActor
     private func preparePhotos() async {
-        guard !isPreparingPhoto else { return }
-        if photoSelections.isEmpty { isPhotoPanelShown = false; return }
-        isPreparingPhoto = true
-        defer { isPreparingPhoto = false }
+        guard !isSending else { return }
         let selections = photoSelections
-        var prepared: [PrivateMessagePhoto] = []
+        preparedPhotoSelections.removeAll { record in !selections.contains(record.item) }
+        pendingPhotos = preparedPhotoSelections.map { $0.photo }
+        uploadedPhotos = uploadedPhotos.filter { entry in pendingPhotos.contains { $0.id == entry.key } }
+        isPreparingPhoto = true
+        defer { if photoSelections == selections { isPreparingPhoto = false } }
         do {
             for item in selections {
+                try Task.checkCancellation()
+                if preparedPhotoSelections.contains(where: { $0.item == item }) { continue }
                 guard let data = try await item.loadTransferable(type: Data.self) else {
                     throw APIError.businessError(code: -400, message: "无法读取图片，请重新选择")
                 }
                 try Task.checkCancellation()
-                prepared.append(try PrivateMessagePhoto.prepare(data))
+                guard photoSelections.contains(item) else { continue }
+                preparedPhotoSelections.append((item, try PrivateMessagePhoto.prepare(data)))
+                pendingPhotos = selections.compactMap { item in
+                    preparedPhotoSelections.first(where: { $0.item == item })?.photo
+                }
             }
-            pendingPhotos.append(contentsOf: prepared)
-            photoSelections = []
-            isPhotoPanelShown = false
-            isPanelExpanded = false
+        } catch is CancellationError {
+            // Live selections changed while an iCloud download was in progress.
         } catch {
+            guard !Task.isCancelled else { return }
             sendError = error.localizedDescription
         }
     }
@@ -499,14 +567,28 @@ struct MessageConversationView: View {
                 photoStatus = "正在发送图片…"
                 let sent = try await BiliAPI.shared.sendPrivateMessageImage(talkerID: session.talkerID, image: uploadedPhoto)
                 appendSentMessage(sent)
-                pendingPhotos.removeFirst()
-                uploadedPhotos[photo.id] = nil
+                removePhoto(photo)
               }
               await refreshMessagesAfterSending()
               return
             } else {
+                #if DEBUG
+                if ConversationUITestFixture.enabled {
+                    // Exercise sending UI without contacting a real account.
+                    try await Task.sleep(for: .milliseconds(350))
+                    var message = Bilibili_Im_Type_Msg()
+                    message.senderUid = currentMID
+                    message.msgKey = (messages.map(\.msgKey).max() ?? 0) + 1
+                    message.msgType = .enMsgTypeText
+                    message.content = String(decoding: try JSONEncoder().encode(["content": text]), as: UTF8.self)
+                    messages.append(message)
+                    if inputText == text { inputText = "" }
+                    scrollToBottomID = message.msgKey
+                    return
+                }
+                #endif
                 result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
-                inputText = ""
+                if inputText == text { inputText = "" }
             }
             appendSentMessage(result)
             await refreshMessagesAfterSending()
@@ -567,6 +649,11 @@ struct MessageConversationView: View {
         }
         isLoading = false
     }
+}
+
+private struct ConversationScrollSnapshot: Equatable {
+    let height: CGFloat
+    let atBottom: Bool
 }
 
 private struct MessagePayload {

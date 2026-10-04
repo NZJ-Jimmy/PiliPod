@@ -11,9 +11,11 @@ enum ConversationUITestFixture {
         return PrivateMessageSession(session: session)
     }
     static var messages: [Bilibili_Im_Type_Msg] {
-        ["这是一条收到的消息", "文字和表情测试 😀", "多行输入和面板布局测试"].enumerated().map { index, text in
+        let history = (1...20).map { "历史消息 \($0)" } +
+            ["这是一条收到的消息", "文字和表情测试 😀", "多行输入和面板布局测试"]
+        return history.enumerated().map { index, text in
             var message = Bilibili_Im_Type_Msg()
-            message.senderUid = index == 0 ? 123 : 0
+            message.senderUid = index.isMultiple(of: 2) ? 123 : 0
             message.msgKey = UInt64(index + 1)
             message.msgSeqno = UInt64(index + 1)
             message.msgType = .enMsgTypeText

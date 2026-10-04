@@ -32,13 +32,19 @@ struct ConversationPanel<Content: View>: View {
     let height: CGFloat
     let maximumHeight: CGFloat
     @Binding var expanded: Bool
+    let dismissal: CGFloat
+    let onDismiss: () -> Void
     let content: Content
-    @GestureState private var drag: CGFloat = 0
+    @State private var drag: CGFloat = 0
+    @State private var dragOrigin: CGFloat?
 
-    init(height: CGFloat, maximumHeight: CGFloat, expanded: Binding<Bool>, @ViewBuilder content: () -> Content) {
+    init(height: CGFloat, maximumHeight: CGFloat, expanded: Binding<Bool>, dismissal: CGFloat = 0,
+         onDismiss: @escaping () -> Void = {}, @ViewBuilder content: () -> Content) {
         self.height = height
         self.maximumHeight = maximumHeight
         _expanded = expanded
+        self.dismissal = dismissal
+        self.onDismiss = onDismiss
         self.content = content()
     }
 
@@ -46,11 +52,20 @@ struct ConversationPanel<Content: View>: View {
         VStack(spacing: 0) {
             Capsule().fill(.secondary.opacity(0.55)).frame(width: 54, height: 5)
                 .frame(maxWidth: .infinity).frame(height: 28).contentShape(Rectangle())
-                .gesture(DragGesture().updating($drag) { value, state, _ in state = value.translation.height }
+                .gesture(DragGesture(coordinateSpace: .global).onChanged { value in
+                        if dragOrigin == nil { dragOrigin = expanded ? maximumHeight : height }
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { drag = value.translation.height }
+                    }
                     .onEnded { value in
-                        withAnimation(.snappy) {
-                            if value.translation.height < -35 { expanded = true }
-                            if value.translation.height > 35 { expanded = false }
+                        withAnimation(.smooth(duration: 0.25)) {
+                            if !expanded && value.predictedEndTranslation.height > height * 0.45 {
+                                onDismiss()
+                            } else if value.predictedEndTranslation.height < -35 { expanded = true }
+                            else if value.predictedEndTranslation.height > 35 { expanded = false }
+                            drag = 0
+                            dragOrigin = nil
                         }
                     })
                 .accessibilityLabel("展开或收起面板")
@@ -61,9 +76,11 @@ struct ConversationPanel<Content: View>: View {
                     @unknown default: break
                     }
                 }
-            content.frame(maxHeight: .infinity)
+            // Keep the native picker/scroll content stable during the finger-driven resize.
+            content.frame(height: max(0, (expanded ? maximumHeight : height) - 28))
         }
-        .frame(height: min(maximumHeight, max(220, (expanded ? maximumHeight : height) - drag)))
+        .frame(height: max(0, min(maximumHeight,
+            (dragOrigin ?? (expanded ? maximumHeight : height)) - drag) - dismissal), alignment: .top)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
         .padding(.horizontal, 6)
