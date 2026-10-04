@@ -34,6 +34,20 @@ jobs:
               env.write('SIMULATOR_ID=' + device['udid'] + '\n')
           print(runtime, device['name'])
           PY
+      - name: Seed simulator photo library
+        run: |
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+          python3 - <<'PY'
+          import struct, zlib
+          def chunk(kind, data):
+              return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+          w, h = 240, 180
+          pixels = b''.join(b'\0' + bytes(v for x in range(w) for v in (x * 255 // w, y * 255 // h, 160)) for y in range(h))
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
+          open('build/sample-photo.png', 'wb').write(png)
+          PY
+          xcrun simctl addmedia "$SIMULATOR_ID" build/sample-photo.png
       - name: Run unit tests
         run: |
           set -o pipefail

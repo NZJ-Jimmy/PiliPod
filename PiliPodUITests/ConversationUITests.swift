@@ -15,14 +15,15 @@ final class ConversationUITests: XCTestCase {
         XCTAssertLessThan(abs(send.frame.midY - input.frame.midY), 4, "Send arrow must align with a single-line input")
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
-        let keyboardHeight = keyboard.frame.height
+        let keyboardInputY = input.frame.maxY
         capture(app, "conversation-keyboard")
 
         app.buttons["选择表情"].tap()
         let panel = app.otherElements["conversation.panel"].firstMatch
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["😀"].waitForExistence(timeout: 5))
-        XCTAssertLessThan(abs(panel.frame.height - keyboardHeight), 65, "Panel should follow the last keyboard height")
+        // Accessibility groups can include clipped/offscreen scroll children; compare the visible composer anchor.
+        XCTAssertLessThan(abs(input.frame.maxY - keyboardInputY), 16, "Switching keyboard to the panel must preserve the composer position")
         capture(app, "conversation-emotes-collapsed")
         let collapsedHeight = panel.frame.height
         let start = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
@@ -33,6 +34,7 @@ final class ConversationUITests: XCTestCase {
 
         app.buttons["选择照片"].tap()
         XCTAssertTrue(app.staticTexts["照片"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.collectionViews.firstMatch.waitForExistence(timeout: 25), "Native photo grid should load")
         capture(app, "conversation-photos")
     }
 
