@@ -16,6 +16,16 @@ struct SettingsView: View {
             }
             Section {
                 NavigationLink {
+                    MyPageSettingsView()
+                } label: {
+                    SettingsCategoryRow(
+                        title: "我的页面",
+                        systemImage: "person.crop.rectangle",
+                        tint: .purple
+                    )
+                }
+
+                NavigationLink {
                     RecommendSettingsView()
                 } label: {
                     SettingsCategoryRow(

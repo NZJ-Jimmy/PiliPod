@@ -56,13 +56,17 @@ final class LibraryUITests: XCTestCase {
         let mine = app.tabBars.buttons["我的"]
         XCTAssertTrue(mine.waitForExistence(timeout: 15))
         mine.tap()
-        let subscriptions = app.buttons["我的订阅"]
+        let subscriptions = app.buttons["my.all.subscriptions"]
         XCTAssertTrue(subscriptions.waitForExistence(timeout: 5))
         subscriptions.tap()
         XCTAssertTrue(app.navigationBars["我的订阅"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["登录"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        let favorites = app.buttons["我的收藏"]
+        let favorites = app.buttons["my.all.favorites"]
+        for _ in 0..<4 {
+            if favorites.isHittable { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(favorites.waitForExistence(timeout: 5))
         favorites.tap()
         XCTAssertTrue(app.navigationBars["我的收藏"].waitForExistence(timeout: 5))
@@ -71,5 +75,29 @@ final class LibraryUITests: XCTestCase {
         screenshot.name = "我的收藏登录提示"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    @MainActor
+    func testMySectionsExpandIndependentlyAndFullListStillOpens() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["我的"].waitForExistence(timeout: 15))
+        app.tabBars.buttons["我的"].tap()
+        let history = app.buttons["my.section.history"]
+        let offline = app.buttons["my.section.offline"]
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
+        if offline.value as? String == "已展开" { offline.tap() }
+        if history.value as? String == "已展开" { history.tap() }
+        history.tap()
+        XCTAssertEqual(history.value as? String, "已展开")
+        offline.tap()
+        XCTAssertEqual(offline.value as? String, "已展开")
+        XCTAssertEqual(history.value as? String, "已展开")
+        history.tap()
+        XCTAssertEqual(history.value as? String, "已收起")
+        app.buttons["my.all.history"].tap()
+        XCTAssertTrue(app.navigationBars["观看记录"].waitForExistence(timeout: 5))
     }
 }

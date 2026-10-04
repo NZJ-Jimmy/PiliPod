@@ -37,7 +37,7 @@ struct MainTabView: View {
                     Text("动态")
                 }
 
-            MyView()
+            MyView(isActive: selectedTab == .mine)
                 .tag(MainTab.mine)
                 .tabItem {
                     profileTabIcon
