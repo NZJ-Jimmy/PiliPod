@@ -23,6 +23,7 @@ struct MyView: View {
     @State private var appliedDefaults = false
     @State private var selectedPreviewVideo: VideoItem?
     @State private var selectedPreviewFolder: LibraryFolder?
+    @State private var selectedPreviewSource = ""
     @Namespace private var previewNamespace
 
     var body: some View {
@@ -82,9 +83,11 @@ struct MyView: View {
             }
             .navigationDestination(item: $selectedPreviewVideo) { video in
                 VideoDetailPage(video: video, namespace: previewNamespace, onBack: { selectedPreviewVideo = nil })
+                    .navigationTransition(.zoom(sourceID: selectedPreviewSource, in: previewNamespace))
             }
             .navigationDestination(item: $selectedPreviewFolder) { folder in
                 LibraryMediaView(folder: folder)
+                    .navigationTransition(.zoom(sourceID: selectedPreviewSource, in: previewNamespace))
             }
             .fullScreenCover(isPresented: $showLoginSheet) {
                 LoginPageView()
@@ -269,9 +272,15 @@ struct MyView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
             if expandedSections.contains(section) {
-                MyPagePreview(section: section,
-                    openVideo: { selectedPreviewVideo = $0 },
-                    openFolder: { selectedPreviewFolder = $0 })
+                MyPagePreview(section: section, namespace: previewNamespace,
+                    openVideo: { video, source in
+                        selectedPreviewSource = source
+                        selectedPreviewVideo = video
+                    },
+                    openFolder: { folder, source in
+                        selectedPreviewSource = source
+                        selectedPreviewFolder = folder
+                    })
                     .transition(.opacity)
             }
         }

@@ -26,6 +26,14 @@ struct MyPageSettingsTests {
             from: Data("{}".utf8)
         )
         #expect(decoded.myPage == nil)
-        #expect(MyPageSettings().expanded.isEmpty)
+        #expect(MyPageSettings().expanded == [.history, .favorites])
+    }
+
+    @Test func newDefaultsAndLegacyMigrationKeepCustomPreferences() {
+        #expect(Array(MyPageSettings().order.prefix(2)) == [.history, .favorites])
+        let legacy = MyPageSettings(order: MyPageSection.allCases, expanded: [])
+        #expect(legacy.upgradingLegacyDefaults == MyPageSettings())
+        let custom = MyPageSettings(order: [.subscriptions, .history, .favorites, .offline, .watchLater], expanded: [.subscriptions])
+        #expect(custom.upgradingLegacyDefaults == custom)
     }
 }

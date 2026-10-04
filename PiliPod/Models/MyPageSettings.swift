@@ -26,13 +26,18 @@ enum MyPageSection: String, CaseIterable, Codable, Identifiable {
 }
 
 struct MyPageSettings: Codable, Equatable {
-    var order: [MyPageSection] = MyPageSection.allCases
-    var expanded: Set<MyPageSection> = []
+    static let defaultOrder: [MyPageSection] = [.history, .favorites, .offline, .subscriptions, .watchLater]
+    var order: [MyPageSection] = Self.defaultOrder
+    var expanded: Set<MyPageSection> = [.history, .favorites]
+
+    var upgradingLegacyDefaults: MyPageSettings {
+        order == MyPageSection.allCases && expanded.isEmpty ? MyPageSettings() : normalized
+    }
 
     var normalized: MyPageSettings {
         var seen = Set<MyPageSection>()
         let unique = order.filter { seen.insert($0).inserted }
-        return MyPageSettings(order: unique + MyPageSection.allCases.filter { !seen.contains($0) }, expanded: expanded)
+        return MyPageSettings(order: unique + Self.defaultOrder.filter { !seen.contains($0) }, expanded: expanded)
     }
 }
 
@@ -50,6 +55,6 @@ final class MyPageSettingsStore: ObservableObject {
 
     private init() {
         settings = UserDefaults.standard.data(forKey: Self.key)
-            .flatMap { try? JSONDecoder().decode(MyPageSettings.self, from: $0) }?.normalized ?? MyPageSettings()
+            .flatMap { try? JSONDecoder().decode(MyPageSettings.self, from: $0) }?.upgradingLegacyDefaults ?? MyPageSettings()
     }
 }

@@ -3,8 +3,9 @@ import SwiftUI
 /// A single horizontal preview; its lifetime follows the expanded section.
 struct MyPagePreview: View {
     let section: MyPageSection
-    let openVideo: (VideoItem) -> Void
-    let openFolder: (LibraryFolder) -> Void
+    let namespace: Namespace.ID
+    let openVideo: (VideoItem, String) -> Void
+    let openFolder: (LibraryFolder, String) -> Void
     @ObservedObject private var session = LoginSession.shared
     @ObservedObject private var cache = OfflineCacheManager.shared
     @State private var videos: [VideoItem] = []
@@ -13,6 +14,7 @@ struct MyPagePreview: View {
     @State private var errorMessage: String?
     @State private var retry = 0
     @State private var generation = 0
+    @State private var loadedAccount: String?
 
     private var offlineItems: [OfflineCacheItem] {
         Array(cache.sortedItems.filter { $0.status == .completed }.prefix(6))
@@ -32,8 +34,9 @@ struct MyPagePreview: View {
                                 duration: item.duration, progressSeconds: nil,
                                 publishTimeText: "", bottomRcmdReasonText: nil
                             )
-                            previewCard(cover: item.cover, title: item.title, subtitle: "离线 · \(video.durationFormatted)") {
-                                openVideo(video)
+                            let source = "my.preview.offline.\(item.id)"
+                            previewCard(source: source, cover: item.cover, title: item.title, subtitle: "离线 · \(video.durationFormatted)") {
+                                openVideo(video, source)
                             }
                         }
                     }
@@ -53,18 +56,20 @@ struct MyPagePreview: View {
                 message("暂无内容")
             } else {
                 carousel {
-                    ForEach(Array(videos.enumerated()), id: \.offset) { _, video in
-                        previewCard(cover: video.cover, title: video.title, subtitle: video.uploader) {
-                            openVideo(video)
+                    ForEach(Array(videos.enumerated()), id: \.offset) { index, video in
+                        let source = "my.preview.\(section.rawValue).video.\(video.bvid).\(index)"
+                        previewCard(source: source, cover: video.cover, title: video.title, subtitle: video.uploader) {
+                            openVideo(video, source)
                         }
                     }
                     ForEach(folders) { folder in
+                        let source = "my.preview.\(section.rawValue).folder.\(folder.type ?? 11).\(folder.id)"
                         let available = !folder.isUnavailable &&
                             (section != .subscriptions || folder.type == 11 || folder.type == 21)
                         previewCard(
-                            cover: folder.cover ?? "", title: folder.title,
+                            source: source, cover: folder.cover ?? "", title: folder.title,
                             subtitle: available ? "\(folder.kindLabel) · \(folder.mediaCount ?? 0) 个视频" : "暂不可用"
-                        ) { openFolder(folder) }
+                        ) { openFolder(folder, source) }
                         .disabled(!available)
                         .opacity(available ? 1 : 0.5)
                     }
@@ -89,7 +94,7 @@ struct MyPagePreview: View {
         .scrollIndicators(.hidden)
     }
 
-    private func previewCard(cover: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+    private func previewCard(source: String, cover: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 CachedAsyncImage(url: URL(string: cover.replacingOccurrences(of: "http://", with: "https://"))) { phase in
@@ -110,14 +115,20 @@ struct MyPagePreview: View {
         }
         .foregroundStyle(.primary)
         .buttonStyle(.plain)
+        .matchedTransitionSource(id: source, in: namespace)
     }
 
     @MainActor
     private func load() async {
         generation += 1
         let requestGeneration = generation
-        videos = []
-        folders = []
+        // Keep the originating card visible while the reverse zoom completes.
+        // Account changes must discard the previous account's preview immediately.
+        if loadedAccount != session.cookieString || !session.isLogin {
+            videos = []
+            folders = []
+        }
+        loadedAccount = session.cookieString
         errorMessage = nil
         guard section != .offline, session.isLogin else { isLoading = false; return }
         isLoading = true
