@@ -162,6 +162,7 @@ struct VideoDetailPage: View {
     @Namespace private var danmakuActionGlass
     @State private var isFullscreen = false
     @State private var fullscreenTrigger: FullscreenTrigger = .none
+    @State private var usesLegacyVideoDetailTabs = AudioVideoSettingsStore.load().usesLegacyVideoDetailTabs
     @State private var selectedTab: VideoDetailTab = .intro
     @State private var isDraggingVideoPageStrip = false
     @State private var toastMessage: String?
@@ -517,7 +518,13 @@ struct VideoDetailPage: View {
                         ZStack(alignment: .bottom) {
                             VStack(spacing: 0) {
                                 tabBar
-                                tabContent(width: geo.size.width)
+                                Group {
+                                    if usesLegacyVideoDetailTabs {
+                                        tabContent(width: geo.size.width)
+                                    } else {
+                                        introTabContent(commentSheetHeight: max(1, geo.size.height - nonFullscreenPlayerHeight(for: geo.size)))
+                                    }
+                                }
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -761,6 +768,7 @@ struct VideoDetailPage: View {
 #endif
         .onAppear {
             isClosing = false
+            usesLegacyVideoDetailTabs = AudioVideoSettingsStore.load().usesLegacyVideoDetailTabs
             ManualPictureInPictureCoordinator.shared.stopIfNeeded()
             danmakuConfig = DanmakuConfigStore.load()
             isDanmakuEnabled = danmakuConfig.isEnabled
@@ -787,6 +795,7 @@ struct VideoDetailPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .audioVideoSettingsDidChange)) { notification in
             if let settings = notification.object as? AudioVideoSettings {
                 progressBarStyle = settings.videoProgressBarStyle
+                usesLegacyVideoDetailTabs = settings.usesLegacyVideoDetailTabs
             }
         }
         .onChange(of: sponsorBlockSettings) { _, newValue in
@@ -1149,16 +1158,18 @@ struct VideoDetailPage: View {
 
     private var tabBar: some View {
         HStack(spacing: 18) {
-            ForEach(VideoDetailTab.allCases, id: \.self) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Text(titleForTab(tab))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                        .padding(.vertical, 6)
+            if usesLegacyVideoDetailTabs {
+                ForEach(VideoDetailTab.allCases, id: \.self) { tab in
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Text(titleForTab(tab))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             Spacer()
 
@@ -1226,7 +1237,7 @@ struct VideoDetailPage: View {
             isSwipeEnabled: !isDraggingVideoPageStrip,
             leadingSwipeExclusionWidth: nonFullscreenBackSwipeReservedWidth,
             introContent: {
-                introTabContent
+                introTabContent()
             },
             commentsContent: {
                 VideoCommentsTabView(
@@ -1291,11 +1302,14 @@ struct VideoDetailPage: View {
         )
     }
 
-    private var introTabContent: some View {
+    private func introTabContent(commentSheetHeight: CGFloat = 1) -> some View {
         Group {
             if let model = introTabDisplayModel {
                 IntroTabContentView(
                     model: model,
+                    showsCommentPreview: !usesLegacyVideoDetailTabs,
+                    commentCount: viewModel.videoDetail?.stat.reply ?? 0,
+                    commentSheetHeight: commentSheetHeight,
                     namespace: namespace,
                     onOpenOwner: { mid, aid in
                         viewModel.prepareForNestedNavigation()
