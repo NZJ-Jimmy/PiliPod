@@ -19,11 +19,7 @@ final class SwiftChatConversationUITests: XCTestCase {
         capture(app, "swiftchat-sent")
         // The bindable standalone composer exposes the native Add label, unlike full Chat.
         app.buttons["Add"].tap()
-        let photos = app.buttons.matching(NSPredicate(format:
-            "identifier == %@ OR label == %@ OR label == %@", "chat.attach.photos", "Photos", "Photo Library")).firstMatch
-        XCTAssertTrue(photos.waitForExistence(timeout: 5))
-        capture(app, "swiftchat-attachment-menu")
-        photos.tap()
+        // With only photoLibrary enabled, the SDK opens its native picker directly.
         let onboarding = app.buttons["OK"]
         if onboarding.waitForExistence(timeout: 10) { onboarding.tap() }
         XCTAssertTrue(app.images.matching(identifier: "PXGGridLayout-Info").firstMatch.waitForExistence(timeout: 25))
