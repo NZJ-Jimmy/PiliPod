@@ -101,6 +101,7 @@ struct MessageTimelineView: View {
         }
         .onChange(of: model.scrollRequest) { _, request in
             guard request != nil else { return }
+            historyAnchor = nil
             followsLatest = true
             scrollToLatest(animated: true)
             model.scrollRequest = nil

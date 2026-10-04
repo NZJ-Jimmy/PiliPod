@@ -101,7 +101,7 @@ final class ConversationViewModel: ObservableObject {
         do {
             #if DEBUG
             if ConversationUITestFixture.enabled {
-                try await Task.sleep(for: .milliseconds(250))
+                try await Task.sleep(for: .milliseconds(ProcessInfo.processInfo.arguments.contains("--uitest-slow-history") ? 10_000 : 250))
                 var history = ConversationUITestFixture.messages
                 for index in history.indices {
                     history[index].msgKey += 1000

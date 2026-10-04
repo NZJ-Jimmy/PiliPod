@@ -2,6 +2,31 @@ import XCTest
 
 final class ConversationUITests: XCTestCase {
     @MainActor
+    func testSendDuringHistoryLoadKeepsLatestVisible() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-conversation", "--uitest-slow-history"]
+        app.launch()
+        let messages = app.scrollViews["conversation.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 15))
+        let history = app.buttons["conversation.history"]
+        for _ in 0..<8 {
+            if history.isHittable { break }
+            messages.swipeDown()
+        }
+        history.tap()
+        let input = app.descendants(matching: .any)["conversation.input"].firstMatch
+        input.tap()
+        input.typeText("Race")
+        XCTAssertTrue(history.exists, "The delayed history request must still be in flight")
+        app.buttons["conversation.send"].tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: history)], timeout: 15), .completed)
+        let sent = app.staticTexts["Race"]
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: sent)], timeout: 5), .completed,
+            "A late history response must not move away from the user's newly sent message")
+        capture(app, "conversation-send-during-history")
+    }
+
+    @MainActor
     func testGroupedTimelineAndSystemNavigation() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-conversation", "--uitest-groups"]
@@ -29,7 +54,7 @@ final class ConversationUITests: XCTestCase {
         let y = anchor.frame.minY
         capture(app, "conversation-before-history")
         history.tap()
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: history)], timeout: 10), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: history)], timeout: 15), .completed)
         XCTAssertTrue(anchor.isHittable)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
             abs(anchor.frame.minY - y) < 6
