@@ -24,9 +24,11 @@ struct MessageComposer: View {
                 }
             } label: {
                 if model.isPreparingPhoto { ProgressView().frame(width: 44, height: 44) }
-                else { Image(systemName: "plus").font(.title3).frame(width: 44, height: 44) }
+                else { Image(systemName: "plus").font(.title3).dynamicTypeSize(...DynamicTypeSize.xxxLarge).frame(width: 44, height: 44) }
             }
             .buttonStyle(.plain)
+            .frame(width: 44, height: 44).contentShape(Circle())
+            .accessibilityElement(children: .ignore)
             .glassEffect(.regular.interactive(), in: .circle)
             .disabled(model.isSending || model.isPreparingPhoto || model.isLoading || !model.canSend)
             .accessibilityLabel("选择照片")
@@ -45,7 +47,7 @@ struct MessageComposer: View {
                                     if model.isSending { ProgressView().tint(.white) }
                                     else { Image(systemName: "arrow.up") }
                                 }
-                                    .font(.body.weight(.bold))
+                                    .font(.body.weight(.bold)).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
                                     .background(Color.blue, in: Circle())
@@ -74,10 +76,12 @@ struct MessageComposer: View {
                 if (inputPanel == .emotes) { Task { await model.loadEmotes() } }
             } label: {
                 Image(systemName: (inputPanel == .emotes) ? "keyboard" : "face.smiling")
-                    .font(.body.weight(.medium))
+                    .font(.body.weight(.medium)).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
+            .frame(width: 44, height: 44).contentShape(Circle())
+            .accessibilityElement(children: .ignore)
             .disabled(model.isSending)
             .accessibilityLabel((inputPanel == .emotes) ? "显示键盘" : "选择表情")
             .foregroundStyle(.secondary)

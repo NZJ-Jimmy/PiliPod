@@ -1,6 +1,13 @@
 import SwiftUI
 import UIKit
 
+struct MessageFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
 struct MessageRow: View {
     let row: MessagePresentation
     let emotionURLs: [String: String]
@@ -20,6 +27,12 @@ struct MessageRow: View {
                     content.containerRelativeFrame(.horizontal, count: 100, span: 74, spacing: 0,
                         alignment: row.isMine ? .trailing : .leading)
                     if !row.isMine { Spacer(minLength: 0) }
+                }
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(key: MessageFramePreferenceKey.self,
+                            value: [row.id: geometry.frame(in: .named("message.timeline"))])
+                    }
                 }
                 .contextMenu {
                     if let text = row.content.copyText {

@@ -21,7 +21,8 @@ struct MessageTimelineView: View {
     @State private var dragBoundary: CGFloat?
     @State private var position = ScrollPosition(idType: String.self)
     @State private var snapshot: ConversationScrollSnapshot?
-    @State private var prependSnapshot: ConversationScrollSnapshot?
+    @State private var visibleFrames: [String: CGRect] = [:]
+    @State private var historyAnchor: (id: String, y: CGFloat)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -64,12 +65,15 @@ struct MessageTimelineView: View {
             .padding(.horizontal, 12).padding(.vertical, 12)
         }
         .scrollPosition($position)
+        .coordinateSpace(name: "message.timeline")
+        .onPreferenceChange(MessageFramePreferenceKey.self) { visibleFrames = $0 }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .onScrollPhaseChange { _, phase in
             isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
+            if isUserScrolling && model.isLoadingHistory { historyAnchor = nil }
         }
         .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
             ConversationScrollSnapshot(height: geometry.containerSize.height,
@@ -79,16 +83,12 @@ struct MessageTimelineView: View {
                     geometry.contentSize.height + geometry.contentInsets.bottom - 24)
         } action: { old, new in
             snapshot = new
-            if let saved = prependSnapshot, !model.isLoadingHistory, old.contentHeight != new.contentHeight {
-                // Restore the visible pixel offset, not just the first row's top edge.
-                prependSnapshot = nil
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    position.scrollTo(y: max(0, saved.offset + new.contentHeight - saved.contentHeight))
-                }
-            } else if isUserScrolling && old.height == new.height {
+            if isUserScrolling && old.height == new.height && historyAnchor == nil {
                 followsLatest = new.atBottom
+            }
+            if followsLatest, historyAnchor == nil, dragBoundary == nil,
+               old.contentHeight != new.contentHeight {
+                scrollToLatest(animated: false)
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
@@ -100,9 +100,9 @@ struct MessageTimelineView: View {
             }
         }
         .onChange(of: model.scrollRequest) { _, request in
-            guard let request else { return }
+            guard request != nil else { return }
             followsLatest = true
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.22)) { position.scrollTo(id: request, anchor: .bottom) }
+            scrollToLatest(animated: true)
             model.scrollRequest = nil
         }
         .onChange(of: model.rows.last?.id) { _, _ in
@@ -113,18 +113,35 @@ struct MessageTimelineView: View {
     }
 
     private func scrollToLatest(animated: Bool) {
-        guard let id = model.rows.last?.id else { return }
+        guard !model.rows.isEmpty else { return }
         withAnimation(animated && !reduceMotion ? .smooth(duration: 0.22) : nil) {
-            position.scrollTo(id: id, anchor: .bottom)
+            position.scrollTo(edge: .bottom)
         }
     }
 
     @MainActor private func loadHistory() async {
+        guard !model.isLoadingHistory, model.hasMoreHistory else { return }
         followsLatest = false
-        // Capture after the loading indicator has appeared; it has the same fixed height.
-        prependSnapshot = snapshot
+        if let height = snapshot?.height,
+           let visible = visibleFrames.filter({ $0.value.maxY > 0 && $0.value.minY < height })
+            .min(by: { $0.value.minY < $1.value.minY }) {
+            historyAnchor = (visible.key, visible.value.minY)
+        }
         await model.loadOlderMessages()
-        if model.historyError != nil { prependSnapshot = nil }
+        guard model.historyError == nil, let anchor = historyAnchor else { historyAnchor = nil; return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { position.scrollTo(id: anchor.id, anchor: .top) }
+        // Lazy stacks estimate unrendered heights. Correct using the actual bubble frame,
+        // including any timestamp/group boundary changes caused by the prepended page.
+        for _ in 0..<10 {
+            try? await Task.sleep(for: .milliseconds(20))
+            guard historyAnchor != nil, let frame = visibleFrames[anchor.id], let snapshot else { break }
+            let delta = frame.minY - anchor.y
+            if abs(delta) < 0.5 { break }
+            withTransaction(transaction) { position.scrollTo(y: max(0, snapshot.offset + delta)) }
+        }
+        historyAnchor = nil
     }
 
     private var panelDismissGesture: some Gesture {

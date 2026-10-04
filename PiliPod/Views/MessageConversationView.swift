@@ -105,6 +105,9 @@ struct MessageConversationView: View {
             if focused { inputPanel = nil; isPanelExpanded = false }
         }
         .task(id: model.photoSelections) { await model.preparePhotos() }
+        .sensoryFeedback(.success, trigger: model.isSending) { old, new in
+            old && !new && model.sendError == nil
+        }
         .sheet(isPresented: Binding(get: { presentedImage != nil }, set: { if !$0 { presentedImage = nil } })) {
             NavigationStack {
                 if let payload = presentedImage {
@@ -131,6 +134,7 @@ struct MessageConversationView: View {
 
     private var conversationNavigationHeader: some View {
         conversationHeader.frame(maxWidth: .infinity)
+            .padding(.top, -44)
             .background {
                 Rectangle().fill(.ultraThinMaterial)
                     .mask(LinearGradient(stops: [.init(color: .black, location: 0),
@@ -159,9 +163,10 @@ struct MessageConversationView: View {
                 }
                 .frame(width: 60, height: 60)
                 .clipShape(Circle())
+                .accessibilityHidden(true)
                 HStack(spacing: 4) {
                     Text(session.name).lineLimit(1)
-                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold))
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).accessibilityHidden(true)
                 }
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 12).padding(.vertical, 6)

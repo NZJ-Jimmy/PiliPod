@@ -71,6 +71,7 @@ struct MessageCardPayload {
     let kind: Kind
     let title: String
     let summary: String
+    let author: String
     let coverURL: String
     let bvid: String?
     let duration: Int
@@ -98,6 +99,9 @@ struct MessageCardPayload {
             ?? "分享内容"
         summary = (dictionary["summary"] as? String)
             ?? (dictionary["desc"] as? String)
+            ?? ""
+        author = MessagePayload.string(dictionary["uname"])
+            ?? MessagePayload.string(dictionary["author"])
             ?? ""
         coverURL = MessagePayload.string(dictionary["cover"])
             ?? MessagePayload.string(dictionary["thumb"])

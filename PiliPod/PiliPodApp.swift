@@ -67,8 +67,7 @@ struct PiliPodApp: App {
         WindowGroup {
             #if DEBUG
             if ConversationUITestFixture.enabled {
-                NavigationStack { MessageConversationView(session: ConversationUITestFixture.session) }
-                    .preferredColorScheme(.dark)
+                ConversationUITestHost()
             } else {
                 MainTabView()
             }

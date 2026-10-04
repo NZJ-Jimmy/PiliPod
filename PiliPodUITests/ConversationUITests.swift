@@ -2,6 +2,16 @@ import XCTest
 
 final class ConversationUITests: XCTestCase {
     @MainActor
+    func testGroupedTimelineAndSystemNavigation() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-conversation", "--uitest-groups"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["多行输入和面板布局测试"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars.buttons.firstMatch.isHittable)
+        capture(app, "conversation-groups-light")
+    }
+
+    @MainActor
     func testHistoryPrependPreservesViewportAndSendReturnsToLatest() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-conversation"]
@@ -21,6 +31,9 @@ final class ConversationUITests: XCTestCase {
         history.tap()
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: history)], timeout: 10), .completed)
         XCTAssertTrue(anchor.isHittable)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
+            abs(anchor.frame.minY - y) < 6
+        }, evaluatedWith: anchor)], timeout: 5), .completed)
         XCTAssertLessThan(abs(anchor.frame.minY - y), 6, "Prepending a page must preserve the visible message's pixel position")
         capture(app, "conversation-after-history")
         let input = app.descendants(matching: .any)["conversation.input"].firstMatch
@@ -36,7 +49,7 @@ final class ConversationUITests: XCTestCase {
     @MainActor
     func testNativeCopyMenuAndDarkLargeTextComposer() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--uitest-conversation", "--uitest-dark", "--uitest-large-text"]
+        app.launchArguments = ["--uitest-conversation", "--uitest-dark", "--uitest-large-text", "--uitest-groups"]
         app.launch()
         let last = app.staticTexts["多行输入和面板布局测试"]
         XCTAssertTrue(last.waitForExistence(timeout: 15))

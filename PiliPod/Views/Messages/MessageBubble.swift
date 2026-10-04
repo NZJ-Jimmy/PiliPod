@@ -5,21 +5,36 @@ struct MessageBubbleShape: Shape {
     let position: MessageGroupPosition
 
     func path(in rect: CGRect) -> Path {
-        let tail: CGFloat = position.hasTail ? 6 : 0
-        let body = CGRect(x: isMine ? rect.minX : rect.minX + tail, y: rect.minY,
-            width: max(0, rect.width - tail), height: rect.height)
-        var path = Path(roundedRect: body, cornerRadius: min(19, rect.height / 2))
+        let radius = min(19, rect.height / 2)
+        let right = rect.maxX - 6
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
+        path.addLine(to: CGPoint(x: right - radius, y: rect.minY))
+        path.addQuadCurve(to: CGPoint(x: right, y: rect.minY + radius),
+            control: CGPoint(x: right, y: rect.minY))
         if position.hasTail {
-            let edge = isMine ? body.maxX : body.minX
-            let sign: CGFloat = isMine ? 1 : -1
-            path.move(to: CGPoint(x: edge - sign * 13, y: rect.maxY - 1))
-            path.addQuadCurve(to: CGPoint(x: edge + sign * 6, y: rect.maxY),
-                control: CGPoint(x: edge, y: rect.maxY + 1))
-            path.addQuadCurve(to: CGPoint(x: edge, y: rect.maxY - 15),
-                control: CGPoint(x: edge - sign * 2, y: rect.maxY - 4))
-            path.closeSubpath()
+            path.addLine(to: CGPoint(x: right, y: rect.maxY - radius))
+            path.addCurve(to: CGPoint(x: rect.maxX, y: rect.maxY),
+                control1: CGPoint(x: right, y: rect.maxY - 5),
+                control2: CGPoint(x: right + 1, y: rect.maxY - 2))
+            path.addQuadCurve(to: CGPoint(x: right - 12, y: rect.maxY - 2),
+                control: CGPoint(x: right - 2, y: rect.maxY + 1))
+            path.addQuadCurve(to: CGPoint(x: right - radius, y: rect.maxY),
+                control: CGPoint(x: right - 15, y: rect.maxY))
+        } else {
+            path.addLine(to: CGPoint(x: right, y: rect.maxY - radius))
+            path.addQuadCurve(to: CGPoint(x: right - radius, y: rect.maxY),
+                control: CGPoint(x: right, y: rect.maxY))
         }
-        return path
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + radius, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY))
+        path.closeSubpath()
+        return isMine ? path : path.applying(CGAffineTransform(a: -1, b: 0, c: 0, d: 1,
+            tx: rect.minX + rect.maxX, ty: 0))
     }
 }
 
@@ -35,7 +50,7 @@ struct MessageBubble: View {
             .font(.body)
             .foregroundStyle(isMine ? .white : .primary)
             .padding(.horizontal, 15).padding(.vertical, 9)
-            .padding(isMine ? .trailing : .leading, position.hasTail ? 6 : 0)
+            .padding(isMine ? .trailing : .leading, 6)
             .background(isMine ? Color(contrast == .increased ? .systemIndigo : .systemBlue) : Color(.secondarySystemBackground),
                 in: MessageBubbleShape(isMine: isMine, position: position))
     }

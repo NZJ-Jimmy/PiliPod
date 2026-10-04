@@ -51,9 +51,10 @@ enum MessagePresentationAdapter {
 
     static func content(_ message: Bilibili_Im_Type_Msg) -> MessageContent {
         let type = message.msgType.rawValue
-        if message.sysCancel || message.msgStatus == 2 || type == 5 || type == 8 {
+        if type == 5 || type == 8 {
             return .notice("消息已撤回")
         }
+        if message.sysCancel || message.msgStatus == 2 { return .notice("此消息已不可用") }
         if type == 2, let image = try? JSONDecoder().decode(PrivateMessageImagePayload.self, from: Data(message.content.utf8)) {
             return .image(image)
         }

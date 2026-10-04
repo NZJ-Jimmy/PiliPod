@@ -49,7 +49,7 @@ private final class RecordingConversationService: ConversationMessageService {
 
 @MainActor
 struct ConversationViewModelTests {
-    private func model(_ service: RecordingConversationService) -> ConversationViewModel {
+    private func makeModel(_ service: RecordingConversationService) -> ConversationViewModel {
         var session = Bilibili_Im_Type_SessionInfo()
         session.sessionType = 1
         session.talkerID = 123
@@ -61,7 +61,7 @@ struct ConversationViewModelTests {
     @Test func failedSendPreservesDraftAndManualRetryReusesBubble() async {
         let service = RecordingConversationService()
         service.rejectText = true
-        let model = model(service)
+        let model = makeModel(service)
         model.inputText = "draft 😀"
         await model.sendMessage()
         let failedID = model.rows.first?.id
@@ -81,7 +81,7 @@ struct ConversationViewModelTests {
 
     @Test func typingWhileSendingDoesNotLoseNewDraft() async {
         let service = RecordingConversationService()
-        let model = model(service)
+        let model = makeModel(service)
         model.inputText = "first"
         service.onText = { model.inputText = "next draft" }
         await model.sendMessage()
@@ -93,7 +93,7 @@ struct ConversationViewModelTests {
     @Test func failedRefreshAfterAcknowledgementDoesNotOfferResend() async {
         let service = RecordingConversationService()
         service.rejectRefresh = true
-        let model = model(service)
+        let model = makeModel(service)
         model.inputText = "accepted"
         await model.sendMessage()
         #expect(model.inputText.isEmpty)
@@ -105,7 +105,7 @@ struct ConversationViewModelTests {
     @Test func partialImageFailureRetainsOnlyUnsentPhotosAndReusesUpload() async {
         let service = RecordingConversationService()
         service.rejectImageNumber = 2
-        let model = model(service)
+        let model = makeModel(service)
         let first = PrivateMessagePhoto(data: Data([1]))
         let second = PrivateMessagePhoto(data: Data([2]))
         model.pendingPhotos = [first, second]

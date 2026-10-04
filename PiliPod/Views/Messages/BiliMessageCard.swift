@@ -95,6 +95,11 @@ struct BiliMessageCard: View {
                     .padding(.top, 10)
                     .padding(.bottom, card.summary.isEmpty ? 12 : 4)
 
+                if !card.author.isEmpty {
+                    Label(card.author, systemImage: "person.crop.circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.horizontal, 12).padding(.bottom, 8)
+                }
                 if !card.summary.isEmpty {
                     Text(card.summary)
                         .font(.subheadline)
