@@ -63,6 +63,10 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["登录"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         let favorites = app.buttons["我的收藏"]
+        for _ in 0..<4 {
+            if favorites.isHittable { break }
+            app.swipeUp()
+        }
         XCTAssertTrue(favorites.waitForExistence(timeout: 5))
         favorites.tap()
         XCTAssertTrue(app.navigationBars["我的收藏"].waitForExistence(timeout: 5))
@@ -71,5 +75,29 @@ final class LibraryUITests: XCTestCase {
         screenshot.name = "我的收藏登录提示"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    @MainActor
+    func testMySectionsExpandIndependentlyAndFullListStillOpens() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["我的"].waitForExistence(timeout: 15))
+        app.tabBars.buttons["我的"].tap()
+        let history = app.buttons["my.section.history"]
+        let offline = app.buttons["my.section.offline"]
+        XCTAssertTrue(history.waitForExistence(timeout: 5))
+        if offline.value as? String == "已展开" { offline.tap() }
+        if history.value as? String == "已展开" { history.tap() }
+        history.tap()
+        XCTAssertEqual(history.value as? String, "已展开")
+        offline.tap()
+        XCTAssertEqual(offline.value as? String, "已展开")
+        XCTAssertEqual(history.value as? String, "已展开")
+        history.tap()
+        XCTAssertEqual(history.value as? String, "已收起")
+        app.buttons["观看记录"].tap()
+        XCTAssertTrue(app.navigationBars["观看记录"].waitForExistence(timeout: 5))
     }
 }

@@ -2,7 +2,7 @@ name: Verify library and build test IPA
 
 on:
   push:
-    branches: [codex/my-library]
+    branches: [codex/my-library, codex/my-page-layout]
   workflow_dispatch:
 
 permissions:
