@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DA005C290001000000000003 /* SwiftChat in Frameworks */ = {isa = PBXBuildFile; productRef = DA005C290001000000000002 /* SwiftChat */; };
 		C31A86E82FC467D40064DFDC /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = C31A86E72FC467D40064DFDC /* SwiftProtobuf */; };
 		C38E5EE02FBFF03C00899168 /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = C38E5EDF2FBFF03C00899168 /* MPVKit */; };
 		C3B9223D30084A4A00A1F2C1 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = C3B9223C30084A4A00A1F2C1 /* ZIPFoundation */; };
@@ -86,6 +87,7 @@
 			files = (
 				C38E5EE02FBFF03C00899168 /* MPVKit in Frameworks */,
 				C31A86E82FC467D40064DFDC /* SwiftProtobuf in Frameworks */,
+				DA005C290001000000000003 /* SwiftChat in Frameworks */,
 				C3B9223D30084A4A00A1F2C1 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -158,6 +160,7 @@
 			packageProductDependencies = (
 				C38E5EDF2FBFF03C00899168 /* MPVKit */,
 				C31A86E72FC467D40064DFDC /* SwiftProtobuf */,
+				DA005C290001000000000002 /* SwiftChat */,
 				C3B9223C30084A4A00A1F2C1 /* ZIPFoundation */,
 			);
 			productName = PiliPod;
@@ -245,6 +248,7 @@
 			mainGroup = C3E76F752FBED5AF00DD7377;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				DA005C290001000000000001 /* XCRemoteSwiftPackageReference "swift-chat" */,
 				C38E5EDE2FBFF03C00899168 /* XCRemoteSwiftPackageReference "MPVKit" */,
 				C38E61B32FC466FD00899168 /* XCRemoteSwiftPackageReference "swift-protobuf" */,
 				C3B9223B30084A4A00A1F2C1 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
@@ -717,6 +721,11 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		DA005C290001000000000001 /* XCRemoteSwiftPackageReference "swift-chat" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/unionst/swift-chat.git";
+			requirement = { kind = exactVersion; version = 1.0.6; };
+		};
 		C38E5EDE2FBFF03C00899168 /* XCRemoteSwiftPackageReference "MPVKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/mpvkit/MPVKit.git";
@@ -744,6 +753,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		DA005C290001000000000002 /* SwiftChat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA005C290001000000000001 /* XCRemoteSwiftPackageReference "swift-chat" */;
+			productName = SwiftChat;
+		};
 		C31A86E72FC467D40064DFDC /* SwiftProtobuf */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C38E61B32FC466FD00899168 /* XCRemoteSwiftPackageReference "swift-protobuf" */;

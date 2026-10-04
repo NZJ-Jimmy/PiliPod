@@ -53,9 +53,15 @@ iOS 26+ (测试平台为iOS27)
 
 ## 声明
 
+此个人使用分支的私信界面依赖 [Swift Chat 1.0.6](https://github.com/unionst/swift-chat)，由 Union Street Studios, LLC 提供闭源二进制，按其独立许可证免费嵌入应用。本仓库不包含或单独分发该 SDK；构建时通过 Swift Package Manager 获取。详见 [第三方依赖声明](THIRD_PARTY_NOTICES.md)。
+
+PiliPod 上游代码的 GNU GPL v3 许可证及版权声明保持不变，Swift Chat 不属于 GPL 授权的源代码。这里的个人使用说明不授予重新许可上游代码的权利，也不宣称两种许可证兼容；含该闭源依赖的整合构建用于个人测试，不作为可自由再分发的 GPL 完整应用发布。
+
 此项目（PiliPod）是个人为了兴趣与swift学习而开发，仅用于学习和测试，请于下载后24小时内删除。所用API皆从官方网站收集，不提供任何破解内容。
 
 ## 致谢
+
+- [Swift Chat](https://github.com/unionst/swift-chat) — 私信 UI（独立闭源许可证）
 
 - [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus/)
 - [cilicili](https://github.com/Rone89/cilicili)

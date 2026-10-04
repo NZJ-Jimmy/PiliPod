@@ -2,6 +2,15 @@
   "originHash" : "34c1adbb83fc48305340c8101d0702be5ea661689a31310cccdfbdc087558aef",
   "pins" : [
     {
+      "identity" : "swift-chat",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/unionst/swift-chat.git",
+      "state" : {
+        "revision" : "97661f29776b39bd92b9616cb3cb4f305ddef57d",
+        "version" : "1.0.6"
+      }
+    },
+    {
       "identity" : "mpvkit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mpvkit/MPVKit.git",
