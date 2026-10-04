@@ -12,6 +12,9 @@ struct MessageComposer: View {
     var focus: FocusState<Bool>.Binding
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var hasContent: Bool {
+        model.pendingPhoto != nil || !model.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
@@ -23,14 +26,20 @@ struct MessageComposer: View {
                     focus.wrappedValue = false
                 }
             } label: {
-                if model.isPreparingPhoto { ProgressView().frame(width: 44, height: 44) }
-                else { Image(systemName: "plus").font(.title3).dynamicTypeSize(...DynamicTypeSize.xxxLarge).frame(width: 44, height: 44) }
+                Group {
+                    if model.isPreparingPhoto { ProgressView() }
+                    else { Image(systemName: "plus").font(.title3).dynamicTypeSize(...DynamicTypeSize.xxxLarge) }
+                }
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
             .frame(width: 44, height: 44).contentShape(Circle())
             .accessibilityElement(children: .ignore)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .accessibilityAddTraits(.isButton)
             .disabled(model.isSending || model.isPreparingPhoto || model.isLoading || !model.canSend)
+            .foregroundStyle(.primary)
             .accessibilityLabel("选择照片")
             VStack(spacing: 0) {
               if !model.pendingPhotos.isEmpty { photoPreview }
@@ -40,8 +49,10 @@ struct MessageComposer: View {
                     .lineLimit(1 ... 4)
                     .font(.body)
                     .frame(minHeight: 30)
+                    .padding(.vertical, 7).padding(.leading, 12)
+                    .padding(.trailing, hasContent ? 0 : 7)
                     .accessibilityIdentifier("conversation.input")
-                        if model.pendingPhoto != nil || !model.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if hasContent {
                             Button { Task { await model.sendMessage() } } label: {
                                 Group {
                                     if model.isSending { ProgressView().tint(.white) }
@@ -51,17 +62,17 @@ struct MessageComposer: View {
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
                                     .background(Color.blue, in: Circle())
-                                    .frame(width: 44, height: 44).contentShape(Rectangle()).padding(-7)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
                             .disabled(model.isSending || model.isPreparingPhoto || model.isLoading || !model.canSend)
                             .accessibilityLabel(model.isSending ? "发送中" : "发送消息")
                             .accessibilityIdentifier("conversation.send")
                             .transition(.opacity)
                         }
                 }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.trailing, 5)
             }
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
@@ -78,14 +89,16 @@ struct MessageComposer: View {
                 Image(systemName: (inputPanel == .emotes) ? "keyboard" : "face.smiling")
                     .font(.body.weight(.medium)).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
             .frame(width: 44, height: 44).contentShape(Circle())
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
             .disabled(model.isSending)
             .accessibilityLabel((inputPanel == .emotes) ? "显示键盘" : "选择表情")
             .foregroundStyle(.secondary)
-            .glassEffect(.regular.interactive(), in: .circle)
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
@@ -172,8 +185,10 @@ struct MessageComposer: View {
                                         Image(systemName: "xmark.circle.fill")
                                             .symbolRenderingMode(.palette).foregroundStyle(.white, .black.opacity(0.6))
                                             .font(.title3)
+                                            .frame(width: 44, height: 44).contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityElement(children: .ignore)
                                     .accessibilityLabel("移除图片")
                                 }
                             }

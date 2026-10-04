@@ -48,28 +48,27 @@ struct MessageConversationView: View {
             if session.sessionType == 1 {
                 composer
                 if isPanelShown {
-                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: (geometry.size.height + keyboard.overlap) * 0.78,
+                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: geometry.size.height * 0.78,
                         expanded: $isPanelExpanded, dismissal: panelDismissal, onDismiss: dismissPanel) {
                         if inputPanel == .photos { composer.photoPanel }
                         else { composer.emotePanel }
                     }
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("conversation")).minY } action: { panelTop = $0 }
-                    // SwiftUI already reserves the visible keyboard; the panel shares that space while switching.
-                    .padding(.bottom, -keyboard.overlap)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
           }
         }
         .background(Color(.systemBackground))
-        #if DEBUG
-        .modifier(ConversationUITestAppearance())
-        #endif
         .coordinateSpace(name: "conversation")
         .ignoresSafeArea(.container, edges: .bottom)
+        // Custom input panels occupy the keyboard's space. Only the system keyboard
+        // contributes keyboard safe-area insets; never compensate with a second offset.
+        .ignoresSafeArea(.keyboard, edges: isPanelShown ? .bottom : [])
         .safeAreaInset(edge: .top, spacing: 0) { conversationNavigationHeader }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarRole(.editor)
         .toolbar(.hidden, for: .tabBar)
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)

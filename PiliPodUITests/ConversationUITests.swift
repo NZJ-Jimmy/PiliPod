@@ -109,6 +109,11 @@ final class ConversationUITests: XCTestCase {
         XCTAssertTrue(panel.waitForExistence(timeout: 3))
         XCTAssertGreaterThan(panel.frame.height, collapsedHeight + 60)
         capture(app, "conversation-emotes-expanded")
+        app.buttons["显示键盘"].tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: panel)], timeout: 5), .completed)
+        XCTAssertLessThan(abs(input.frame.maxY - keyboardInputY), 4, "Returning from an expanded panel must restore the system keyboard position")
+        capture(app, "conversation-keyboard-after-panel")
 
         app.buttons["选择照片"].tap()
         XCTAssertFalse(app.staticTexts["照片"].exists, "The photo panel must have no extra title bar")
@@ -123,6 +128,7 @@ final class ConversationUITests: XCTestCase {
             .withOffset(CGVector(dx: photo.frame.midX, dy: photo.frame.midY)).tap()
         XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 15), "Selecting a photo must immediately add it to the composer")
         XCTAssertTrue(panel.exists, "Continuous selection must keep the picker open")
+        XCTAssertGreaterThanOrEqual(app.buttons["移除图片"].frame.width, 44)
         XCTAssertFalse(app.buttons["添加 1 张"].exists)
         capture(app, "conversation-photos")
         let messages = app.scrollViews["conversation.messages"]

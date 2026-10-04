@@ -41,6 +41,7 @@ struct ConversationUITestHost: View {
                 }
         }
         .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--uitest-dark") ? .dark : .light)
+        .modifier(ConversationUITestAppearance())
     }
 }
 
@@ -48,8 +49,6 @@ struct ConversationUITestAppearance: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     func body(content: Content) -> some View {
         content
-            .preferredColorScheme(ConversationUITestFixture.enabled &&
-                ProcessInfo.processInfo.arguments.contains("--uitest-dark") ? .dark : nil)
             .environment(\.dynamicTypeSize, ConversationUITestFixture.enabled &&
                 ProcessInfo.processInfo.arguments.contains("--uitest-large-text") ? .accessibility2 : dynamicTypeSize)
     }

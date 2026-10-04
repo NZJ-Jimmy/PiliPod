@@ -6,7 +6,6 @@ import Combine
 final class ConversationKeyboard: ObservableObject {
     @Published var lastHeight: CGFloat = 320
     @Published var isVisible = false
-    @Published var overlap: CGFloat = 0
     var bottomInset: CGFloat {
         PiliPodAppDelegate.activeWindowScene?.windows.first(where: \.isKeyWindow)?.safeAreaInsets.bottom ?? 0
     }
@@ -22,7 +21,6 @@ final class ConversationKeyboard: ObservableObject {
                 let height = window.bounds.intersection(converted).height
                 let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0
                 withAnimation(duration > 0 ? .easeOut(duration: duration) : nil) {
-                    self?.overlap = height
                     self?.isVisible = height > 0
                     if height > 100 { self?.lastHeight = height }
                 }
