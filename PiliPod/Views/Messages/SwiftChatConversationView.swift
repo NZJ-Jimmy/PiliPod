@@ -30,10 +30,20 @@ struct MessageConversationView: View {
                 .chatBubbleStyle(Color("BiliPink"))
                 .chatAutoscrollBehavior(.whenAtBottom)
                 .chatHeader {
-                    ChatHeader(title: session.name, avatarURL: MessagePayload.url(from: session.avatarURL)) {
+                    ChatHeader(title: session.name, action: {
                         if session.sessionType == 1, session.talkerID <= UInt64(Int.max) {
                             selectedUserMID = Int(session.talkerID)
                         }
+                    }) {
+                        CachedAsyncImage(url: MessagePayload.url(from: session.avatarURL)) { phase in
+                            if case .success(let image) = phase { image.resizable().scaledToFill() }
+                            else {
+                                Image(systemName: "person.fill").resizable().scaledToFit()
+                                    .padding(14).foregroundStyle(.secondary)
+                                    .background(Color.secondary.opacity(0.15))
+                            }
+                        }
+                        .frame(width: 60, height: 60).clipShape(Circle())
                     }
                 }
                 .chatEmptyView {
@@ -61,8 +71,12 @@ struct MessageConversationView: View {
                     Button { isFocused = false; showEmotes = true } label: {
                         Image(systemName: "face.smiling").font(.title3).frame(width: 44, height: 44)
                     }
-                    .buttonStyle(.plain).accessibilityLabel("选择表情").padding(.bottom, 8)
+                    .buttonStyle(.plain)
+                    .background(.regularMaterial, in: Circle())
+                    .accessibilityElement(children: .ignore).accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("选择表情")
                 }
+                .padding(.horizontal, 12)
                 .chatInputControlTint(Color("BiliPink"))
                 .chatDictationDisabled(true)
             }
