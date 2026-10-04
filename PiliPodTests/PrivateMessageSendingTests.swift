@@ -5,6 +5,24 @@ import Testing
 @testable import PiliPod
 
 struct PrivateMessageSendingTests {
+    @Test func grpcMetadataMatchesPiliPlusWireSchema() throws {
+        let headers = PrivateMessageGRPC.headers(accessKey: "test-token", buvid: "test-buvid", sessionID: "12345678")
+        #expect(headers["Authorization"] == "identify_v1 test-token")
+        #expect(headers["x-bili-metadata-bin"] == "Cgp0ZXN0LXRva2VuEgphbmRyb2lkX2hkGgdhbmRyb2lkIMyReioGbWFzdGVyMgp0ZXN0LWJ1dmlkOgdhbmRyb2lk")
+        #expect(headers["x-bili-device-bin"] != nil)
+        #expect(headers["x-bili-fawkes-req-bin"] != nil)
+        #expect(headers["grpc-accept-encoding"] == "identity")
+    }
+
+    @Test func grpcBusinessErrorDetailsAreShownInsteadOfNumericSummary() {
+        let detail = PrivateMessageGRPC.protobuf(strings: [2: "对方限制接收消息"], integers: [1: 21035])
+        let any = Data([0x12, UInt8(detail.count)]) + detail
+        let status = PrivateMessageGRPC.protobuf(strings: [2: "21035"], integers: [1: 2])
+            + Data([0x1a, UInt8(any.count)]) + any
+        #expect(PrivateMessageGRPC.errorDetails(status.base64EncodedString().replacingOccurrences(of: "=", with: "")) == "对方限制接收消息")
+        #expect(PrivateMessageGRPC.errorDetails("not base64") == nil)
+    }
+
     @Test func imageMessageUsesPictureTypeAndServerMetadata() throws {
         let image = PrivateMessageImagePayload(url: "https://i0.hdslb.com/test.jpg", height: 480,
             width: 640, imageType: "jpg", original: 1, size: 12345)

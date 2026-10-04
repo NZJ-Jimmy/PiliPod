@@ -11,15 +11,19 @@ import UIKit
 
 struct MessageConversationView: View {
     let session: PrivateMessageSession
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var keyboard = ConversationKeyboard()
 
     @State private var messages: [Bilibili_Im_Type_Msg] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var inputText = ""
     @State private var isSending = false
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var pendingPhoto: PrivateMessagePhoto?
-    @State private var uploadedPhoto: PrivateMessageImagePayload?
+    @State private var pendingPhotos: [PrivateMessagePhoto] = []
+    @State private var uploadedPhotos: [UUID: PrivateMessageImagePayload] = [:]
+    @State private var photoSelections: [PhotosPickerItem] = []
+    @State private var isPhotoPanelShown = false
+    @State private var isPanelExpanded = false
     @State private var isPreparingPhoto = false
     @State private var photoStatus: String?
     @State private var presentedImage: PrivateMessageImagePayload?
@@ -39,27 +43,43 @@ struct MessageConversationView: View {
     private var currentMID: UInt64 {
         UInt64(LoginSession.shared.cookies?.DedeUserID ?? "") ?? 0
     }
+    private var pendingPhoto: PrivateMessagePhoto? { pendingPhotos.first }
+    private var isPanelShown: Bool { isEmotePanelShown || isPhotoPanelShown }
+    private var canSend: Bool {
+        #if DEBUG
+        if ConversationUITestFixture.enabled { return true }
+        #endif
+        return LoginSession.shared.isLogin
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
+          VStack(spacing: 0) {
             messageContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if session.sessionType == 1 {
                 if let pendingPhoto { photoPreview(pendingPhoto) }
                 composer
-                if isEmotePanelShown { emotePanel }
+                if isPanelShown {
+                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: geometry.size.height * 0.78,
+                        expanded: $isPanelExpanded) {
+                        if isPhotoPanelShown { photoPanel }
+                        else { emotePanel }
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+          }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color(.systemBackground))
+        .ignoresSafeArea(.container, edges: .bottom)
+        .safeAreaInset(edge: .top, spacing: 0) { conversationNavigationHeader }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                conversationHeader
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
+        .animation(.snappy(duration: 0.25), value: isPanelShown)
         .navigationDestination(item: $selectedUserMID) { mid in
             UserSpaceView(mid: mid)
         }
@@ -82,15 +102,18 @@ struct MessageConversationView: View {
             }
         }
         .task {
+            #if DEBUG
+            if ConversationUITestFixture.enabled {
+                messages = ConversationUITestFixture.messages
+                isLoading = false
+                return
+            }
+            #endif
             await loadMessages()
             await loadEmotes()
         }
         .onChange(of: isInputFocused) { _, focused in
-            if focused { isEmotePanelShown = false }
-        }
-        .task(id: selectedPhoto) {
-            guard let item = selectedPhoto else { return }
-            await preparePhoto(item)
+            if focused { isEmotePanelShown = false; isPhotoPanelShown = false; isPanelExpanded = false }
         }
         .sheet(isPresented: Binding(get: { presentedImage != nil }, set: { if !$0 { presentedImage = nil } })) {
             NavigationStack {
@@ -116,20 +139,35 @@ struct MessageConversationView: View {
         }
     }
 
+    private var conversationNavigationHeader: some View {
+        ZStack(alignment: .topLeading) {
+            conversationHeader.frame(maxWidth: .infinity)
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left").font(.title3.weight(.medium)).frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .padding(.leading, 16)
+            .padding(.top, 8)
+            .accessibilityLabel("返回")
+        }
+        .frame(height: 102, alignment: .top)
+        .background {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                    .init(color: .black, location: 0.4), .init(color: .clear, location: 1)],
+                    startPoint: .top, endPoint: .bottom))
+                .padding(.bottom, -30)
+                .ignoresSafeArea(edges: .top)
+        }
+    }
+
     private var conversationHeader: some View {
         Button {
             guard session.sessionType == 1, session.talkerID <= UInt64(Int.max) else { return }
             selectedUserMID = Int(session.talkerID)
         } label: {
-            ZStack(alignment: .top) {
-                Text(session.name)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .glassEffect(.regular, in: Capsule())
-                    .padding(.top, 52)
-
+            VStack(spacing: -2) {
                 CachedAsyncImage(url: MessagePayload.url(from: session.avatarURL)) { phase in
                     if case .success(let image) = phase {
                         image.resizable().scaledToFill()
@@ -143,9 +181,16 @@ struct MessageConversationView: View {
                 }
                 .frame(width: 60, height: 60)
                 .clipShape(Circle())
+                HStack(spacing: 4) {
+                    Text(session.name).lineLimit(1)
+                    Image(systemName: "chevron.right").font(.caption2.weight(.semibold))
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .glassEffect(.regular, in: Capsule())
             }
-            .frame(width: 162, height: 72)
-            .offset(y: 14)
+            .frame(maxWidth: 210)
+            .padding(.top, 4)
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
@@ -227,23 +272,28 @@ struct MessageConversationView: View {
     }
 
     private var composer: some View {
-        HStack(spacing: 10) {
-            PhotosPicker(selection: $selectedPhoto, matching: .images, preferredItemEncoding: .compatible) {
+        HStack(alignment: .bottom, spacing: 10) {
+            Button {
+                isPhotoPanelShown.toggle()
+                isEmotePanelShown = false
+                isPanelExpanded = false
+                isInputFocused = false
+            } label: {
                 if isPreparingPhoto { ProgressView().frame(width: 38, height: 38) }
                 else { Image(systemName: "plus").font(.system(size: 20)).frame(width: 38, height: 38) }
             }
             .buttonStyle(.plain)
             .glassEffect(.regular.interactive(), in: .circle)
-            .disabled(isSending || isPreparingPhoto || isLoading || !LoginSession.shared.isLogin)
+            .disabled(isSending || isPreparingPhoto || isLoading || !canSend)
             .accessibilityLabel("选择照片")
-            HStack {
+            HStack(alignment: .bottom, spacing: 8) {
                 TextField("消息", text: $inputText, axis: .vertical)
                     .focused($isInputFocused)
                     .disabled(isSending)
                     .lineLimit(1 ... 4)
                     .font(.body)
-                    .padding(.trailing, 38)
-                    .overlay(alignment: .bottomTrailing) {
+                    .frame(minHeight: 30)
+                    .accessibilityIdentifier("conversation.input")
                         if pendingPhoto != nil || !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Button { Task { await sendMessage() } } label: {
                                 Group {
@@ -256,18 +306,21 @@ struct MessageConversationView: View {
                                     .background(.biliPink, in: Circle())
                             }
                             .buttonStyle(.plain)
-                            .disabled(isSending || isPreparingPhoto || isLoading || !LoginSession.shared.isLogin)
+                            .disabled(isSending || isPreparingPhoto || isLoading || !canSend)
                             .accessibilityLabel(isSending ? "发送中" : "发送消息")
+                            .accessibilityIdentifier("conversation.send")
                             .transition(.opacity)
                         }
-                    }
                 }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .accessibilityIdentifier("conversation.inputCapsule")
 
             Button {
                 isEmotePanelShown.toggle()
+                isPhotoPanelShown = false
+                isPanelExpanded = false
                 isInputFocused = !isEmotePanelShown
                 if isEmotePanelShown { Task { await loadEmotes() } }
             } label: {
@@ -284,7 +337,27 @@ struct MessageConversationView: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 10)
-        .background(.ultraThinMaterial)
+        .accessibilityIdentifier("conversation.composer")
+    }
+
+    private var photoPanel: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("照片").font(.headline)
+                Spacer()
+                Button(photoSelections.isEmpty ? "完成" : "添加 \(photoSelections.count) 张") {
+                    Task { await preparePhotos() }
+                }
+                .disabled(isPreparingPhoto || isSending)
+            }
+            .padding(.horizontal, 18).padding(.bottom, 8)
+            PhotosPicker(selection: $photoSelections, maxSelectionCount: 50, matching: .images,
+                preferredItemEncoding: .compatible) { EmptyView() }
+                .photosPickerStyle(.inline)
+                .photosPickerAccessoryVisibility(isPanelExpanded ? .visible : .hidden, edges: .all)
+                .disabled(isPreparingPhoto || isSending)
+        }
+        .accessibilityIdentifier("conversation.photos")
     }
 
     private var emotePanel: some View {
@@ -341,8 +414,7 @@ struct MessageConversationView: View {
         .buttonStyle(.plain)
         .disabled(isSending)
         .padding(12)
-        .frame(height: 250)
-        .background(.ultraThinMaterial)
+        .padding(.bottom, 20)
     }
 
     private static let emoji = ["😀", "😁", "😂", "🤣", "😊", "🥰", "😍", "😘", "😎", "🤔", "😭", "🥺", "😅", "😆", "😉", "😋", "🤗", "😴", "😮", "😡", "👍", "👎", "👏", "🙏", "🤝", "💪", "✌️", "❤️", "💔", "💕", "🔥", "🎉", "✨", "🌹", "🍻"]
@@ -370,44 +442,43 @@ struct MessageConversationView: View {
             Image(uiImage: photo.image).resizable().scaledToFit().frame(width: 72, height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 4) {
-                Text(photoStatus ?? "已选图片").font(.subheadline)
+                Text(photoStatus ?? "已选 \(pendingPhotos.count) 张图片").font(.subheadline)
                 Text("图片将单独发送，文字草稿保留").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if isSending { ProgressView() }
             else {
                 Button {
-                    pendingPhoto = nil
-                    uploadedPhoto = nil
-                    selectedPhoto = nil
+                    pendingPhotos = []
+                    uploadedPhotos = [:]
                 } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
                 .accessibilityLabel("移除图片")
             }
         }
         .padding(12)
-        .background(.ultraThinMaterial)
     }
 
     @MainActor
-    private func preparePhoto(_ item: PhotosPickerItem) async {
+    private func preparePhotos() async {
+        guard !isPreparingPhoto else { return }
+        if photoSelections.isEmpty { isPhotoPanelShown = false; return }
         isPreparingPhoto = true
-        isInputFocused = false
-        isEmotePanelShown = false
         defer { isPreparingPhoto = false }
+        let selections = photoSelections
+        var prepared: [PrivateMessagePhoto] = []
         do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
-                throw APIError.businessError(code: -400, message: "无法读取图片，请重新选择")
+            for item in selections {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    throw APIError.businessError(code: -400, message: "无法读取图片，请重新选择")
+                }
+                try Task.checkCancellation()
+                prepared.append(try PrivateMessagePhoto.prepare(data))
             }
-            try Task.checkCancellation()
-            let photo = try PrivateMessagePhoto.prepare(data)
-            pendingPhoto = photo
-            uploadedPhoto = nil
-            photoStatus = nil
-            selectedPhoto = nil
-        } catch is CancellationError {
-            return
+            pendingPhotos.append(contentsOf: prepared)
+            photoSelections = []
+            isPhotoPanelShown = false
+            isPanelExpanded = false
         } catch {
-            selectedPhoto = nil
             sendError = error.localizedDescription
         }
     }
@@ -421,31 +492,38 @@ struct MessageConversationView: View {
         defer { isSending = false; photoStatus = nil }
         do {
             let result: PrivateMessageSendResult
-            if let photo = pendingPhoto {
-                if uploadedPhoto == nil {
+            if pendingPhoto != nil {
+              while let photo = pendingPhoto {
+                if uploadedPhotos[photo.id] == nil {
                     photoStatus = "正在上传图片…"
-                    uploadedPhoto = try await BiliAPI.shared.uploadPrivateMessageImage(data: photo.data)
+                    uploadedPhotos[photo.id] = try await BiliAPI.shared.uploadPrivateMessageImage(data: photo.data)
                 }
-                guard let uploadedPhoto else { throw APIError.requestFailed }
+                guard let uploadedPhoto = uploadedPhotos[photo.id] else { throw APIError.requestFailed }
                 photoStatus = "正在发送图片…"
-                result = try await BiliAPI.shared.sendPrivateMessageImage(talkerID: session.talkerID, image: uploadedPhoto)
-                pendingPhoto = nil
-                self.uploadedPhoto = nil
-                selectedPhoto = nil
+                let sent = try await BiliAPI.shared.sendPrivateMessageImage(talkerID: session.talkerID, image: uploadedPhoto)
+                appendSentMessage(sent)
+                pendingPhotos.removeFirst()
+                uploadedPhotos[photo.id] = nil
+              }
+              return
             } else {
                 result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
                 inputText = ""
             }
+            appendSentMessage(result)
+        } catch {
+            sendError = "\(error.localizedDescription)\n内容已保留，可稍后重试。若网络超时，请先确认对方是否已收到。"
+            ErrorLogService.record(error, context: "发送私信")
+        }
+    }
+
+    private func appendSentMessage(_ result: PrivateMessageSendResult) {
             for emotion in result.emotions { emotionURLs[emotion.text] = emotion.url }
             if !messages.contains(where: { $0.msgKey == result.message.msgKey }) {
                 messages.append(result.message)
             }
             errorMessage = nil
             scrollToBottomID = result.message.msgKey
-        } catch {
-            sendError = "\(error.localizedDescription)\n内容已保留。若是网络超时，请先确认对方是否已收到，再决定是否重发。"
-            ErrorLogService.record(error, context: "发送私信")
-        }
     }
 
     private func loadMessages() async {

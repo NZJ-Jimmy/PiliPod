@@ -40,9 +40,13 @@ jobs:
           xcodebuild test -project PiliPod.xcodeproj -scheme PiliPod \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -resultBundlePath build/PrivateMessageTests.xcresult \
-            -only-testing:PiliPodTests -parallel-testing-enabled NO \
+            -only-testing:PiliPodTests -only-testing:PiliPodUITests/ConversationUITests -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             | tee build/test.log
+      - name: Export UI screenshots
+        if: always()
+        run: |
+          xcrun xcresulttool export attachments --path build/PrivateMessageTests.xcresult --output-path build/ui-screenshots || true
       - name: Archive unsigned iOS app
         run: |
           set -o pipefail
@@ -75,3 +79,4 @@ jobs:
           path: |
             build/*.log
             build/PrivateMessageTests.xcresult
+            build/ui-screenshots
