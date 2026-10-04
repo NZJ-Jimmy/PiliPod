@@ -1,0 +1,29 @@
+name: Build Swift Chat Demo IPA
+
+on:
+  push:
+    branches:
+      - swift-chat-demo-build
+    paths:
+      - 'SwiftChatDemoBuild/**'
+      - '.github/workflows/swift-chat-demo-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: SwiftChatDemoBuild
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Xcode
+        run: xcodebuild -version
+      - name: Build unsigned IPA
+        run: bash scripts/build_unsigned_ipa.sh
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SwiftChatDemo-unsigned
+          path: SwiftChatDemoBuild/build/SwiftChatDemo-unsigned.ipa
+          if-no-files-found: error
