@@ -17,9 +17,11 @@ final class SwiftChatConversationUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: cleared, evaluatedWith: input)], timeout: 10), .completed)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         capture(app, "swiftchat-sent")
-        // The bindable standalone composer exposes the native Add label, unlike full Chat.
-        app.buttons["Add"].tap()
-        // With only photoLibrary enabled, the SDK opens its native picker directly.
+        let attach = app.buttons["chat.attach"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 5))
+        attach.tap()
+        let photos = app.buttons["chat.attach.photos"]
+        if photos.waitForExistence(timeout: 3) { photos.tap() }
         let onboarding = app.buttons["OK"]
         if onboarding.waitForExistence(timeout: 10) { onboarding.tap() }
         XCTAssertTrue(app.images.matching(identifier: "PXGGridLayout-Info").firstMatch.waitForExistence(timeout: 25))
@@ -35,8 +37,8 @@ final class SwiftChatConversationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["😀"].waitForExistence(timeout: 5))
         app.buttons["😀"].tap()
         capture(app, "swiftchat-emotes")
-        app.buttons["完成表情选择"].tap()
-        XCTAssertTrue(app.buttons["chat.send"].waitForExistence(timeout: 5))
+        app.buttons["发送所选表情"].tap()
+        XCTAssertTrue(app.staticTexts["😀"].waitForExistence(timeout: 10))
         if app.buttons["Continue"].waitForExistence(timeout: 3) { app.buttons["Continue"].tap() }
         capture(app, "swiftchat-emoji-draft")
     }

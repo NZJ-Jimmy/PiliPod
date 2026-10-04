@@ -8,7 +8,7 @@ struct MessageConversationView: View {
     @State private var pendingMedia: [MessageMedia] = []
     @State private var preparedMedia: [MessageMedia: PrivateMessagePhoto] = [:]
     @State private var isProcessingSend = false
-    @State private var isFocused = false
+    @State private var retryText: String?
     @State private var showEmotes = false
     @State private var inputPanel: ConversationInputPanel?
     @State private var isPanelExpanded = false
@@ -26,7 +26,14 @@ struct MessageConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             Chat(model.rows) { row in sdkMessage(row) }
-                .chatInputHidden(true)
+                .chatInputHidden(session.sessionType != 1)
+                .chatInputPlaceholder("消息")
+                .chatInputCapabilities([.photoLibrary])
+                .chatInputControlTint(Color("BiliPink"))
+                .chatDictationDisabled(true)
+                .onChatSend { text, media in
+                    await send(text: text, media: media)
+                }
                 .chatBubbleStyle(Color("BiliPink"))
                 .chatAutoscrollBehavior(.whenAtBottom)
                 .chatHeader {
@@ -61,25 +68,6 @@ struct MessageConversationView: View {
                         [ChatContextMenuItem("复制", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }]
                     } else { [] }
                 }
-            if session.sessionType == 1 {
-                if isProcessingSend { ProgressView(model.photoStatus ?? "正在发送…").font(.caption) }
-                HStack(alignment: .bottom, spacing: 0) {
-                    // Bind the SDK composer so failures retain text and selected media.
-                    ChatInputBarWithAttachments(text: $model.inputText, pendingMedia: $pendingMedia,
-                        placeholder: "消息", capabilities: [.photoLibrary],
-                        onSend: { Task { await send() } }, isFocused: $isFocused)
-                    Button { isFocused = false; showEmotes = true } label: {
-                        Image(systemName: "face.smiling").font(.title3).frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .background(.regularMaterial, in: Circle())
-                    .accessibilityElement(children: .ignore).accessibilityAddTraits(.isButton)
-                    .accessibilityLabel("选择表情")
-                }
-                .padding(.horizontal, 12)
-                .chatInputControlTint(Color("BiliPink"))
-                .chatDictationDisabled(true)
-            }
         }
         .background(Color(.systemBackground))
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
@@ -92,14 +80,36 @@ struct MessageConversationView: View {
             #endif
             await model.loadEmotes()
         }
-        .sheet(isPresented: $showEmotes, onDismiss: { isFocused = true }) {
+        .toolbar {
+            if session.sessionType == 1 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if retryText != nil || !pendingMedia.isEmpty {
+                        Button("重试发送") {
+                            Task { await send(text: retryText, media: pendingMedia) }
+                        }
+                        .disabled(isProcessingSend)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showEmotes = true } label: { Image(systemName: "face.smiling") }
+                        .accessibilityLabel("选择表情")
+                }
+            }
+        }
+        .sheet(isPresented: $showEmotes) {
             NavigationStack {
               MessageComposer(model: model, keyboard: keyboard, inputPanel: $inputPanel,
                 isPanelExpanded: $isPanelExpanded, panelDismissal: $panelDismissal, focus: $emoteFocus)
                 .emotePanel
                 .navigationTitle("表情").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { showEmotes = false }.accessibilityLabel("完成表情选择")
+                    Button("发送表情") {
+                        let text = model.inputText
+                        showEmotes = false
+                        Task { await send(text: text, media: []) }
+                    }
+                    .disabled(model.inputText.isEmpty || isProcessingSend)
+                    .accessibilityLabel("发送所选表情")
                 } }
             }
                 .presentationDetents([.height(keyboard.lastHeight), .large])
@@ -117,7 +127,11 @@ struct MessageConversationView: View {
         }
         .alert("发送失败", isPresented: Binding(get: { model.sendError != nil },
             set: { if !$0 { model.sendError = nil } })) {
-            Button("好的", role: .cancel) { model.sendError = nil }
+            Button("重试") {
+                model.sendError = nil
+                Task { await send(text: retryText, media: pendingMedia) }
+            }
+            Button("稍后", role: .cancel) { model.sendError = nil }
         } message: { Text(model.sendError ?? "") }
     }
 
@@ -157,13 +171,21 @@ struct MessageConversationView: View {
         return message.contentVersion(row.message.content + String(describing: row.delivery))
     }
 
-    @MainActor private func send() async {
-        guard !isProcessingSend, !model.isLoading, model.canSend else { return }
+    @MainActor private func send(text: String?, media: [MessageMedia]) async {
+        guard !isProcessingSend else { return }
+        guard !model.isLoading, model.canSend else {
+            retryText = text
+            pendingMedia = media
+            model.sendError = "暂时无法发送，请确认已登录并等待消息加载完成。"
+            return
+        }
         isProcessingSend = true
         defer { isProcessingSend = false }
         model.sendError = nil
-        let selection = pendingMedia
-        let text = model.inputText
+        let selection = media
+        pendingMedia = media
+        retryText = text
+        let text = text ?? ""
         do {
             for media in selection where preparedMedia[media] == nil {
                 guard case .image(let url, _, _, _) = media else {
@@ -184,7 +206,9 @@ struct MessageConversationView: View {
             }
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 await model.sendMessage(textOverride: text)
+                if model.sendError != nil { return }
             }
+            retryText = nil
         } catch { model.sendError = "\(error.localizedDescription)\n内容已保留，可稍后重试。" }
     }
 }
