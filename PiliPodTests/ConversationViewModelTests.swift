@@ -90,6 +90,15 @@ struct ConversationViewModelTests {
         #expect(model.rows.first?.content.copyText == "first")
     }
 
+    @Test func attachmentSendUsesCapturedTextWithoutConsumingNewDraft() async {
+        let service = RecordingConversationService()
+        let model = makeModel(service)
+        model.inputText = "new draft typed during upload"
+        await model.sendMessage(textOverride: "caption captured when send was tapped")
+        #expect(service.sentTexts == ["caption captured when send was tapped"])
+        #expect(model.inputText == "new draft typed during upload")
+    }
+
     @Test func failedRefreshAfterAcknowledgementDoesNotOfferResend() async {
         let service = RecordingConversationService()
         service.rejectRefresh = true

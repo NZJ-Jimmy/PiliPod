@@ -149,6 +149,7 @@ struct MessageConversationView: View {
         defer { isProcessingSend = false }
         model.sendError = nil
         let selection = pendingMedia
+        let text = model.inputText
         do {
             for media in selection where preparedMedia[media] == nil {
                 guard case .image(let url, _, _, _) = media else {
@@ -167,8 +168,8 @@ struct MessageConversationView: View {
                 for media in completed { preparedMedia[media] = nil }
                 if model.sendError != nil { return }
             }
-            if !model.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                await model.sendMessage()
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                await model.sendMessage(textOverride: text)
             }
         } catch { model.sendError = "\(error.localizedDescription)\n内容已保留，可稍后重试。" }
     }

@@ -185,10 +185,10 @@ final class ConversationViewModel: ObservableObject {
     }
 
     @MainActor
-    func sendMessage() async {
+    func sendMessage(textOverride: String? = nil) async {
         guard !isSending, !isPreparingPhoto, !isLoading, session.sessionType == 1,
-              pendingPhoto != nil || !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let text = inputText
+              pendingPhoto != nil || !(textOverride ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let text = textOverride ?? inputText
         if pendingPhoto == nil { beginPendingText(text) }
         isSending = true
         defer { isSending = false; photoStatus = nil }
