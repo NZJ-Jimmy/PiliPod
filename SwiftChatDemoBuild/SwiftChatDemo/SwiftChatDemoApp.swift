@@ -65,38 +65,45 @@ struct DemoConversationView: View {
                 let body = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 guard !body.isEmpty || !media.isEmpty else { return }
 
-                messages.append(
-                    DemoMessage(
-                        text: body.isEmpty ? "[附件]" : body,
-                        role: .me,
-                        sentAt: .now,
-                        status: .sending
+                let sentID: UUID? = await MainActor.run {
+                    messages.append(
+                        DemoMessage(
+                            text: body.isEmpty ? "[附件]" : body,
+                            role: .me,
+                            sentAt: .now,
+                            status: .sending
+                        )
                     )
-                )
-
-                let sentID = messages.last?.id
-                try? await Task.sleep(for: .milliseconds(450))
-                if let sentID,
-                   let index = messages.firstIndex(where: { $0.id == sentID }) {
-                    messages[index].status = .delivered
+                    return messages.last?.id
                 }
 
-                typing = [.user(id: "alice", displayName: "Alice")]
+                try? await Task.sleep(for: .milliseconds(450))
+
+                await MainActor.run {
+                    if let sentID,
+                       let index = messages.firstIndex(where: { $0.id == sentID }) {
+                        messages[index].status = .delivered
+                    }
+                    typing = [.user(id: "alice", displayName: "Alice")]
+                }
+
                 try? await Task.sleep(for: .milliseconds(850))
-                typing = []
 
-                messages.append(
-                    DemoMessage(
-                        text: "收到。这个 Demo 目前使用本地模拟回复。",
-                        role: .user(id: "alice", displayName: "Alice"),
-                        sentAt: .now,
-                        status: nil
+                await MainActor.run {
+                    typing = []
+                    messages.append(
+                        DemoMessage(
+                            text: "收到。这个 Demo 目前使用本地模拟回复。",
+                            role: .user(id: "alice", displayName: "Alice"),
+                            sentAt: .now,
+                            status: nil
+                        )
                     )
-                )
 
-                if let sentID,
-                   let index = messages.firstIndex(where: { $0.id == sentID }) {
-                    messages[index].status = .read
+                    if let sentID,
+                       let index = messages.firstIndex(where: { $0.id == sentID }) {
+                        messages[index].status = .read
+                    }
                 }
             }
             .navigationTitle("Alice")
