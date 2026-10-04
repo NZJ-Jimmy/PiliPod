@@ -149,8 +149,19 @@ final class ConversationUITests: XCTestCase {
         XCTAssertTrue(photo.waitForExistence(timeout: 25), "Native photo thumbnails should load")
         capture(app, "conversation-photos-before-selection")
         // Native grid image accessibility nodes have no hittable point; tap their actual on-screen center.
+        // A remote picker can retain accessibility nodes for scrolled-off thumbnails.
+        // Choose a center inside both the panel and the app instead of its first node.
+        let pickerBounds = panel.frame.intersection(app.frame)
+        let visiblePhoto = app.images.matching(identifier: "PXGGridLayout-Info")
+            .allElementsBoundByIndex.first { item in
+                let frame = item.frame
+                return frame.width > 0 && frame.height > 0
+                    && frame.midX > pickerBounds.minX && frame.midX < pickerBounds.maxX
+                    && frame.midY > pickerBounds.minY + 44 && frame.midY < pickerBounds.maxY - 34
+            }
+        let thumbnail = try XCTUnwrap(visiblePhoto, "A visible native photo thumbnail is required")
         app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: photo.frame.midX, dy: photo.frame.midY)).tap()
+            .withOffset(CGVector(dx: thumbnail.frame.midX, dy: thumbnail.frame.midY)).tap()
         XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 15), "Selecting a photo must immediately add it to the composer")
         XCTAssertTrue(panel.exists, "Continuous selection must keep the picker open")
         XCTAssertGreaterThanOrEqual(app.buttons["移除图片"].frame.width, 44)
