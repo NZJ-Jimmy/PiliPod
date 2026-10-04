@@ -46,6 +46,7 @@ struct VideoDetailPlayerSurfaceView: View {
     let previewDraftInfo: VideoPlayerPreviewDraftInfo?
     let currentVideoDurationFallback: TimeInterval
     let onBack: () -> Void
+    let onShowDanmakuList: () -> Void
     let onShowDanmakuSettingsSheet: () -> Void
     let onShowListenVideo: () -> Void
     let onShowSponsorSegments: () -> Void
@@ -428,6 +429,7 @@ struct VideoDetailPlayerSurfaceView: View {
             onReloadVideo: onReloadVideo,
             onStartPictureInPicture: onStartPictureInPicture,
             onShowVideoStreamInfo: toggleDebugPanel,
+            onShowDanmakuList: onShowDanmakuList,
             onSelectQuality: onSelectQuality,
             onSelectPlaybackRate: onSelectPlaybackRate,
             onSeekPreviewChanged: { previewTime in
