@@ -24,8 +24,7 @@ struct MessageConversationView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Chat(model.rows) { row in sdkMessage(row) }
+        Chat(model.rows) { row in sdkMessage(row) }
                 .chatInputHidden(session.sessionType != 1)
                 .chatInputPlaceholder("消息")
                 .chatInputCapabilities([.photoLibrary])
@@ -68,7 +67,6 @@ struct MessageConversationView: View {
                         [ChatContextMenuItem("复制", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }]
                     } else { [] }
                 }
-        }
         .background(Color(.systemBackground))
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor).toolbar(.hidden, for: .tabBar)

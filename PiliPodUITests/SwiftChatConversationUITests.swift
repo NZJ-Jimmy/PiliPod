@@ -7,7 +7,15 @@ final class SwiftChatConversationUITests: XCTestCase {
         app.launch()
         let input = inputView(app)
         XCTAssertTrue(input.waitForExistence(timeout: 15))
-        input.tap()
+        capture(app, "swiftchat-before-input")
+        // Tap the editable leading area, outside the SDK's overlapping send control.
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
+        if !app.keyboards.firstMatch.waitForExistence(timeout: 5) {
+            input.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).tap()
+        }
+        let onboarding = app.buttons["Continue"]
+        if onboarding.waitForExistence(timeout: 2) { onboarding.tap() }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         input.typeText("Swift Chat test")
         let send = app.buttons["chat.send"]
         XCTAssertTrue(send.waitForExistence(timeout: 5))
@@ -17,13 +25,13 @@ final class SwiftChatConversationUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: cleared, evaluatedWith: input)], timeout: 10), .completed)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         capture(app, "swiftchat-sent")
-        let attach = app.buttons["chat.attach"]
+        let attach = app.buttons["Add"]
         XCTAssertTrue(attach.waitForExistence(timeout: 5))
         attach.tap()
         let photos = app.buttons["chat.attach.photos"]
         if photos.waitForExistence(timeout: 3) { photos.tap() }
-        let onboarding = app.buttons["OK"]
-        if onboarding.waitForExistence(timeout: 10) { onboarding.tap() }
+        let photoOnboarding = app.buttons["OK"]
+        if photoOnboarding.waitForExistence(timeout: 10) { photoOnboarding.tap() }
         XCTAssertTrue(app.images.matching(identifier: "PXGGridLayout-Info").firstMatch.waitForExistence(timeout: 25))
         capture(app, "swiftchat-native-photos")
     }
