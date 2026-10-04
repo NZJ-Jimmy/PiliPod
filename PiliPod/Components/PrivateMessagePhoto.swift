@@ -31,24 +31,21 @@ struct PrivateMessageImageBubble: View {
     let onOpen: () -> Void
 
     var body: some View {
-        HStack {
-            if isMine { Spacer(minLength: 44) }
-            Button(action: onOpen) {
-                CachedAsyncImage(url: URL(string: payload.url.replacingOccurrences(of: "http://", with: "https://"))) { phase in
-                    switch phase {
-                    case .success(let image): image.resizable().scaledToFit()
-                    case .failure: Label("图片加载失败", systemImage: "photo").foregroundStyle(.secondary)
-                    default: ProgressView()
-                    }
+        Button(action: onOpen) {
+            CachedAsyncImage(url: MessagePayload.url(from: payload.url)) { phase in
+                switch phase {
+                case .success(let image): image.resizable().scaledToFit()
+                case .failure: Label("图片加载失败", systemImage: "photo").foregroundStyle(.secondary)
+                default: ProgressView()
                 }
-                .frame(width: min(240, 300 * CGFloat(max(1, payload.width)) / CGFloat(max(1, payload.height))),
-                       height: min(300, 240 * CGFloat(max(1, payload.height)) / CGFloat(max(1, payload.width))))
-                .background(Color.secondary.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("查看图片")
-            if !isMine { Spacer(minLength: 44) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aspectRatio(CGFloat(max(1, payload.width)) / CGFloat(max(1, payload.height)), contentMode: .fit)
+            .frame(maxHeight: 360)
+            .background(Color.secondary.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("查看图片")
     }
 }

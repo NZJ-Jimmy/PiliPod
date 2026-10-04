@@ -18,6 +18,7 @@ enum ConversationUITestFixture {
             message.senderUid = index.isMultiple(of: 2) ? 123 : 0
             message.msgKey = UInt64(index + 1)
             message.msgSeqno = UInt64(index + 1)
+            message.timestamp = 1_790_000_000 + UInt64(index * 60)
             message.msgType = .enMsgTypeText
             message.content = String(decoding: try! JSONEncoder().encode(["content": text]), as: UTF8.self)
             return message
