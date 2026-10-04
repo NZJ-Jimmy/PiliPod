@@ -4,7 +4,7 @@
 
 - Author: Union Street Studios, LLC.
 - Copyright © Union Street Studios, LLC.
-- Version: 1.0.6 (commit 97661f29776b39bd92b9616cb3cb4f305ddef57d).
+- Version: 1.0.6 (commit 8a8f0ef5b9f49f3b685dc8f4b864dbc4d2e8b892).
 - Package: https://github.com/unionst/swift-chat
 - License: Swift Chat License, Version 1.0, September 2026.
 - Full license: [Licenses/SwiftChat-LICENSE.md](Licenses/SwiftChat-LICENSE.md).
