@@ -135,11 +135,19 @@ struct VideoDetailPlayerSurfaceView: View {
         max(0, playerHeight - topGestureExclusionHeight - bottomGestureExclusionHeight)
     }
 
+    private var gestureLockLeadingPadding: CGFloat {
+        // The fullscreen canvas extends beyond the safe area. Reserve the
+        // cutout inset explicitly for this control in either landscape direction.
+        12 + (isFullscreen ? max(safeAreaInsets.leading, safeAreaInsets.trailing) : 0)
+    }
+
     var body: some View {
         ZStack(alignment: .center) {
             playerLayer
-            controlsOverlay
-                .frame(width: containerSize.width, height: playerHeight, alignment: .center)
+            if !areGesturesLocked {
+                controlsOverlay
+                    .frame(width: containerSize.width, height: playerHeight, alignment: .center)
+            }
             gestureLockOverlay
         }
         // Controls deliberately use the page's normal layout width. The video
@@ -175,8 +183,8 @@ struct VideoDetailPlayerSurfaceView: View {
             PlayerSpeedBoostTouchView(
                 onTouchDown: { location in
                     let playerY = location.y + (playerHeight - gestureHitAreaHeight) / 2
-                    let lockButtonX = (playerWidth - containerSize.width) / 2 + 12
-                    let isOverLockButton = (controlsVisible || areGesturesLocked) &&
+                    let lockButtonX = (playerWidth - containerSize.width) / 2 + gestureLockLeadingPadding
+                    let isOverLockButton = controlsVisible &&
                         location.x >= lockButtonX && location.x <= lockButtonX + 44 &&
                         abs(playerY - playerHeight / 2) <= 22
                     guard !areGesturesLocked, !isOverLockButton else { return }
@@ -206,17 +214,19 @@ struct VideoDetailPlayerSurfaceView: View {
             danmakuOverlay
             subtitleOverlay
             loadingOverlay
-            fullscreenGradientOverlay
-            collapsedProgressOverlay
-            fullscreenDanmakuPanelOverlay
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-            topStatusOverlay
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            videoShotPreviewOverlay
-            manualSkipOverlay
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            brightnessHudOverlay
-            volumeHudOverlay
+            if !areGesturesLocked {
+                fullscreenGradientOverlay
+                collapsedProgressOverlay
+                fullscreenDanmakuPanelOverlay
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                topStatusOverlay
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                videoShotPreviewOverlay
+                manualSkipOverlay
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                brightnessHudOverlay
+                volumeHudOverlay
+            }
         }
         .frame(width: playerWidth, height: playerHeight, alignment: .center)
         .ignoresSafeArea(isFullscreen ? .all : [])
@@ -329,7 +339,7 @@ struct VideoDetailPlayerSurfaceView: View {
 
     @ViewBuilder
     private var gestureLockOverlay: some View {
-        if controlsVisible || areGesturesLocked {
+        if controlsVisible {
             Button(action: toggleGestureLock) {
                 Image(systemName: areGesturesLocked ? "lock.fill" : "lock.open.fill")
                     .font(.system(size: 17, weight: .semibold))
@@ -340,8 +350,9 @@ struct VideoDetailPlayerSurfaceView: View {
             .glassEffect(.clear.interactive(), in: .circle)
             .accessibilityLabel(areGesturesLocked ? "解锁播放手势" : "锁定播放手势")
             .accessibilityValue(areGesturesLocked ? "已锁定" : "未锁定")
-            .padding(.leading, 12)
+            .padding(.leading, gestureLockLeadingPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .transition(.opacity)
         }
     }
 
@@ -350,18 +361,21 @@ struct VideoDetailPlayerSurfaceView: View {
         cancelSpeedBoostPress()
         endSpeedBoostIfNeeded()
         horizontalSeekPreviewTime = nil
+        progressDragPreviewTime = nil
         isHorizontalSeeking = false
         isBrightnessAdjusting = false
         isVolumeAdjusting = false
         dragInteractionMode = .none
-        showControlsAndAutoHideIfNeeded(forceShow: true)
+        isFullscreenDanmakuPanelVisible = false
+        controlsVisible = !areGesturesLocked
+        refreshControlsAutoHideIfNeeded()
     }
 
     private var subtitleOverlay: some View {
         SubtitleOverlayView(
             cues: subtitleLoader.cues,
             currentTime: currentOverlayTime,
-            controlsVisible: controlsVisible,
+            controlsVisible: controlsVisible && !areGesturesLocked,
             isFullscreen: isFullscreen,
             settings: subtitleSettings
         )
@@ -724,7 +738,7 @@ struct VideoDetailPlayerSurfaceView: View {
 #endif
         if !oldSnapshot.isPlaying && snapshot.isPlaying && controlsVisible {
             refreshControlsAutoHideIfNeeded()
-        } else if oldSnapshot.isPlaying && !snapshot.isPlaying {
+        } else if oldSnapshot.isPlaying && !snapshot.isPlaying && !areGesturesLocked {
             hideControlsTask?.cancel()
         }
         if !snapshot.isPlaying, snapshot.currentTime >= snapshot.duration - 0.05, snapshot.duration > 0 {
@@ -755,7 +769,7 @@ struct VideoDetailPlayerSurfaceView: View {
     }
 
     private func showControlsAndAutoHideIfNeeded(forceShow: Bool) {
-        guard !showDebugPanel else {
+        guard !showDebugPanel || areGesturesLocked else {
             controlsVisible = true
             hideControlsTask?.cancel()
             return
@@ -772,7 +786,8 @@ struct VideoDetailPlayerSurfaceView: View {
 
     private func refreshControlsAutoHideIfNeeded() {
         hideControlsTask?.cancel()
-        guard controlsVisible, playerUISnapshot.isPlaying else { return }
+        // A locked player's unlock button must also disappear when paused.
+        guard controlsVisible, playerUISnapshot.isPlaying || areGesturesLocked else { return }
 
         hideControlsTask = Task { @MainActor in
             do {
