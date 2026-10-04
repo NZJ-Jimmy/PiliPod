@@ -109,19 +109,13 @@ struct MessageConversationView: View {
         .sensoryFeedback(.success, trigger: model.isSending) { old, new in
             old && !new && model.sendError == nil
         }
-        .sheet(isPresented: Binding(get: { presentedImage != nil }, set: { if !$0 { presentedImage = nil } })) {
-            NavigationStack {
-                if let payload = presentedImage {
-                    CachedAsyncImage(url: MessagePayload.url(from: payload.url)) { phase in
-                        if case .success(let image) = phase { image.resizable().scaledToFit() }
-                        else if case .failure = phase { ContentUnavailableView("图片加载失败", systemImage: "photo") }
-                        else { ProgressView() }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .navigationTitle("图片")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { presentedImage = nil } } }
-                }
+        .fullScreenCover(isPresented: Binding(
+            get: { presentedImage != nil }, set: { if !$0 { presentedImage = nil } }
+        )) {
+            if let payload = presentedImage,
+               let url = MessagePayload.url(from: payload.url) {
+                FullscreenImageViewer(imageURL: url.absoluteString,
+                    onDismiss: { presentedImage = nil })
             }
         }
         .alert("发送失败", isPresented: Binding(

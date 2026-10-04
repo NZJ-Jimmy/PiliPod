@@ -51,8 +51,13 @@ struct MessageBubble: View {
             .foregroundStyle(isMine ? .white : .primary)
             .padding(.horizontal, 15).padding(.vertical, 9)
             .padding(isMine ? .trailing : .leading, 6)
-            .background(isMine ? Color(contrast == .increased ? .systemIndigo : .systemBlue) : Color(.secondarySystemBackground),
-                in: MessageBubbleShape(isMine: isMine, position: position))
+            .background {
+                let shape = MessageBubbleShape(isMine: isMine, position: position)
+                shape.fill(isMine ? Color("BiliPink") : Color(.secondarySystemBackground))
+                    .overlay {
+                        if isMine && contrast == .increased { shape.fill(.black.opacity(0.25)) }
+                    }
+            }
     }
 }
 

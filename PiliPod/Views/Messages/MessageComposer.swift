@@ -61,7 +61,7 @@ struct MessageComposer: View {
                                     .font(.body.weight(.bold)).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                                     .foregroundStyle(.white)
                                     .frame(width: 30, height: 30)
-                                    .background(Color.blue, in: Circle())
+                                    .background(Color("BiliPink"), in: Circle())
                                     .frame(width: 44, height: 44).contentShape(Rectangle())
                                     .accessibilityHidden(true)
                             }
