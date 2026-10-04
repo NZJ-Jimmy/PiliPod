@@ -2,6 +2,58 @@ import XCTest
 
 final class ConversationUITests: XCTestCase {
     @MainActor
+    func testHistoryPrependPreservesViewportAndSendReturnsToLatest() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-conversation"]
+        app.launch()
+        let messages = app.scrollViews["conversation.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 15))
+        let history = app.buttons["conversation.history"]
+        for _ in 0..<8 {
+            if history.isHittable { break }
+            messages.swipeDown()
+        }
+        XCTAssertTrue(history.isHittable)
+        let anchor = app.staticTexts["历史消息 1"]
+        XCTAssertTrue(anchor.isHittable)
+        let y = anchor.frame.minY
+        capture(app, "conversation-before-history")
+        history.tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: history)], timeout: 10), .completed)
+        XCTAssertTrue(anchor.isHittable)
+        XCTAssertLessThan(abs(anchor.frame.minY - y), 6, "Prepending a page must preserve the visible message's pixel position")
+        capture(app, "conversation-after-history")
+        let input = app.descendants(matching: .any)["conversation.input"].firstMatch
+        input.tap()
+        input.typeText("Send from history")
+        app.buttons["conversation.send"].tap()
+        let sent = app.staticTexts["Send from history"]
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: sent)], timeout: 10), .completed)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        capture(app, "conversation-send-from-history")
+    }
+
+    @MainActor
+    func testNativeCopyMenuAndDarkLargeTextComposer() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-conversation", "--uitest-dark", "--uitest-large-text"]
+        app.launch()
+        let last = app.staticTexts["多行输入和面板布局测试"]
+        XCTAssertTrue(last.waitForExistence(timeout: 15))
+        last.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["复制"].waitForExistence(timeout: 5))
+        capture(app, "conversation-native-copy-dark")
+        app.buttons["复制"].tap()
+        let input = app.descendants(matching: .any)["conversation.input"].firstMatch
+        input.tap()
+        input.typeText("Accessible")
+        XCTAssertTrue(app.buttons["conversation.send"].isHittable)
+        XCTAssertGreaterThanOrEqual(app.buttons["选择照片"].frame.width, 44)
+        XCTAssertGreaterThanOrEqual(app.buttons["选择表情"].frame.width, 44)
+        capture(app, "conversation-dark-large-text")
+    }
+
+    @MainActor
     func testComposerAlignmentAndExpandablePanels() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-conversation"]

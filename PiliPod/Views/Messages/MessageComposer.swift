@@ -10,10 +10,12 @@ struct MessageComposer: View {
     @Binding var isPanelExpanded: Bool
     @Binding var panelDismissal: CGFloat
     var focus: FocusState<Bool>.Binding
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
-                withAnimation(.smooth(duration: 0.25)) {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
                     inputPanel = inputPanel == .photos ? nil : .photos
                     
                     isPanelExpanded = false
@@ -62,7 +64,7 @@ struct MessageComposer: View {
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
             Button {
-                withAnimation(.smooth(duration: 0.25)) {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
                     inputPanel = inputPanel == .emotes ? nil : .emotes
                     
                     isPanelExpanded = false
@@ -117,7 +119,7 @@ struct MessageComposer: View {
                 }
             }
             ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 12) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 4 : 7), spacing: 12) {
                     if let package = model.emotePackages.first(where: { $0.id == model.selectedPackageID }) {
                         ForEach(package.emote) { emote in
                             Button { model.inputText += emote.text } label: {

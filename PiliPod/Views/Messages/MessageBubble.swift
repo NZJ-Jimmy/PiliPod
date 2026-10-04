@@ -28,7 +28,7 @@ struct MessageBubble: View {
     let emotionURLs: [String: String]
     let isMine: Bool
     let position: MessageGroupPosition
-    @Environment(\.accessibilityContrast) private var contrast
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         PrivateMessageText(text: text, emotionURLs: emotionURLs)

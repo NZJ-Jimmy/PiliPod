@@ -79,7 +79,7 @@ struct MessageTimelineView: View {
                     geometry.contentSize.height + geometry.contentInsets.bottom - 24)
         } action: { old, new in
             snapshot = new
-            if let saved = prependSnapshot, old.contentHeight != new.contentHeight {
+            if let saved = prependSnapshot, !model.isLoadingHistory, old.contentHeight != new.contentHeight {
                 // Restore the visible pixel offset, not just the first row's top edge.
                 prependSnapshot = nil
                 var transaction = Transaction()
@@ -122,9 +122,9 @@ struct MessageTimelineView: View {
     @MainActor private func loadHistory() async {
         followsLatest = false
         // Capture after the loading indicator has appeared; it has the same fixed height.
-        let saved = snapshot
+        prependSnapshot = snapshot
         await model.loadOlderMessages()
-        if model.historyError == nil { prependSnapshot = saved }
+        if model.historyError != nil { prependSnapshot = nil }
     }
 
     private var panelDismissGesture: some Gesture {

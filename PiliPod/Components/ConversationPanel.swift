@@ -40,6 +40,7 @@ struct ConversationPanel<Content: View>: View {
     let dismissal: CGFloat
     let onDismiss: () -> Void
     let content: Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drag: CGFloat = 0
     @State private var dragOrigin: CGFloat?
 
@@ -64,7 +65,7 @@ struct ConversationPanel<Content: View>: View {
                         withTransaction(transaction) { drag = value.translation.height }
                     }
                     .onEnded { value in
-                        withAnimation(.smooth(duration: 0.25)) {
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
                             if !expanded && value.predictedEndTranslation.height > height * 0.45 {
                                 onDismiss()
                             } else if value.predictedEndTranslation.height < -35 { expanded = true }

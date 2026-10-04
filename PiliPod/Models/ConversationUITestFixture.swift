@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import SwiftUI
 
 enum ConversationUITestFixture {
     static var enabled: Bool { ProcessInfo.processInfo.arguments.contains("--uitest-conversation") }
@@ -23,6 +24,17 @@ enum ConversationUITestFixture {
             message.content = String(decoding: try! JSONEncoder().encode(["content": text]), as: UTF8.self)
             return message
         }
+    }
+}
+
+struct ConversationUITestAppearance: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    func body(content: Content) -> some View {
+        content
+            .preferredColorScheme(ConversationUITestFixture.enabled &&
+                ProcessInfo.processInfo.arguments.contains("--uitest-dark") ? .dark : nil)
+            .environment(\.dynamicTypeSize, ConversationUITestFixture.enabled &&
+                ProcessInfo.processInfo.arguments.contains("--uitest-large-text") ? .accessibility2 : dynamicTypeSize)
     }
 }
 #endif

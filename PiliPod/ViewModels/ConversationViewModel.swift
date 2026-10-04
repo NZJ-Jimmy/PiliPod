@@ -5,6 +5,7 @@ import Combine
 @MainActor
 final class ConversationViewModel: ObservableObject {
     let session: PrivateMessageSession
+    private let service: any ConversationMessageService
     private(set) var messages: [Bilibili_Im_Type_Msg] = []
     @Published private(set) var rows: [MessagePresentation] = []
     @Published var scrollRequest: String?
@@ -31,7 +32,10 @@ final class ConversationViewModel: ObservableObject {
     @Published var isLoadingEmotes = false
     @Published var emoteError: String?
     @Published var emotionURLs: [String: String] = [:]
-    init(session: PrivateMessageSession) { self.session = session }
+    init(session: PrivateMessageSession, service: (any ConversationMessageService)? = nil) {
+        self.session = session
+        self.service = service ?? BiliConversationMessageService()
+    }
     var currentMID: UInt64 { UInt64(LoginSession.shared.cookies?.DedeUserID ?? "") ?? 0 }
     var pendingPhoto: PrivateMessagePhoto? { pendingPhotos.first }
     var canSend: Bool {
@@ -103,6 +107,8 @@ final class ConversationViewModel: ObservableObject {
                     history[index].msgKey += 1000
                     history[index].msgSeqno = 0
                     history[index].timestamp = UInt64(index + 1)
+                    history[index].content = String(decoding: try JSONEncoder().encode(
+                        ["content": "更早消息 \(index + 1)"]), as: UTF8.self)
                 }
                 messages.insert(contentsOf: history, at: 0)
                 rebuildRows()
@@ -110,8 +116,7 @@ final class ConversationViewModel: ObservableObject {
                 return
             }
             #endif
-            let fetched = try await BiliAPI.shared.fetchPrivateMessageMessages(
-                talkerID: session.talkerID, sessionType: session.sessionType, endSeqno: cursor)
+            let fetched = try await service.messages(session: session, before: cursor)
             let older = fetched.filter { $0.msgSeqno > 0 && $0.msgSeqno < cursor }
             merge(older)
             // The endpoint's decoded response currently exposes no explicit has-more flag.
@@ -128,7 +133,7 @@ final class ConversationViewModel: ObservableObject {
         emoteError = nil
         defer { isLoadingEmotes = false }
         do {
-            emotePackages = try await BiliAPI.shared.fetchUserReplyEmotePackages()
+            emotePackages = try await service.emotes()
             for package in emotePackages {
                 for emote in package.emote { emotionURLs[emote.text] = emote.url }
             }
@@ -193,11 +198,11 @@ final class ConversationViewModel: ObservableObject {
               while let photo = pendingPhoto {
                 if uploadedPhotos[photo.id] == nil {
                     photoStatus = "正在上传图片…"
-                    uploadedPhotos[photo.id] = try await BiliAPI.shared.uploadPrivateMessageImage(data: photo.data)
+                    uploadedPhotos[photo.id] = try await service.uploadImage(data: photo.data)
                 }
                 guard let uploadedPhoto = uploadedPhotos[photo.id] else { throw APIError.requestFailed }
                 photoStatus = "正在发送图片…"
-                let sent = try await BiliAPI.shared.sendPrivateMessageImage(talkerID: session.talkerID, image: uploadedPhoto)
+                let sent = try await service.sendImage(talkerID: session.talkerID, image: uploadedPhoto)
                 appendSentMessage(sent)
                 removePhoto(photo)
               }
@@ -225,7 +230,7 @@ final class ConversationViewModel: ObservableObject {
                     return
                 }
                 #endif
-                result = try await BiliAPI.shared.sendPrivateMessage(talkerID: session.talkerID, text: text)
+                result = try await service.sendText(talkerID: session.talkerID, text: text)
                 if inputText == text { inputText = "" }
             }
             appendSentMessage(result)
@@ -234,7 +239,9 @@ final class ConversationViewModel: ObservableObject {
             if var failed = pending {
                 failed.delivery = .failed
                 pending = failed
-                rebuildRows()
+                if let index = rows.firstIndex(where: { $0.id == failed.id }) {
+                    rows[index].delivery = .failed
+                }
             }
             sendError = "\(error.localizedDescription)\n内容已保留，可稍后重试。若网络超时，请先确认对方是否已收到。"
             ErrorLogService.record(error, context: "发送私信")
@@ -260,8 +267,7 @@ final class ConversationViewModel: ObservableObject {
 
     func refreshMessagesAfterSending() async {
         do {
-            let fetched = try await BiliAPI.shared.fetchPrivateMessageMessages(
-                talkerID: session.talkerID, sessionType: session.sessionType)
+            let fetched = try await service.messages(session: session, before: 0)
                 
             merge(fetched)
         } catch {
@@ -289,8 +295,7 @@ final class ConversationViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
-            let fetched = try await BiliAPI.shared.fetchPrivateMessageMessages(
-                talkerID: session.talkerID, sessionType: session.sessionType)
+            let fetched = try await service.messages(session: session, before: 0)
             merge(fetched)
             hasMoreHistory = fetched.count >= 50
 

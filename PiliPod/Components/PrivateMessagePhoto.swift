@@ -5,7 +5,11 @@ import ImageIO
 struct PrivateMessagePhoto: Identifiable {
     let id = UUID()
     let data: Data
-    var image: UIImage { UIImage(data: data) ?? UIImage() }
+    let image: UIImage
+    init(data: Data, image: UIImage? = nil) {
+        self.data = data
+        self.image = image ?? UIImage(data: data) ?? UIImage()
+    }
 
     static func prepare(_ data: Data) throws -> PrivateMessagePhoto {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -21,7 +25,7 @@ struct PrivateMessagePhoto: Identifiable {
         guard let jpeg = image.jpegData(compressionQuality: 0.85) else {
             throw APIError.businessError(code: -400, message: "图片转换失败")
         }
-        return PrivateMessagePhoto(data: jpeg)
+        return PrivateMessagePhoto(data: jpeg, image: image)
     }
 }
 

@@ -48,7 +48,7 @@ struct MessageConversationView: View {
             if session.sessionType == 1 {
                 composer
                 if isPanelShown {
-                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: geometry.size.height * 0.78,
+                    ConversationPanel(height: keyboard.lastHeight, maximumHeight: (geometry.size.height + keyboard.overlap) * 0.78,
                         expanded: $isPanelExpanded, dismissal: panelDismissal, onDismiss: dismissPanel) {
                         if inputPanel == .photos { composer.photoPanel }
                         else { composer.emotePanel }
@@ -62,6 +62,9 @@ struct MessageConversationView: View {
           }
         }
         .background(Color(.systemBackground))
+        #if DEBUG
+        .modifier(ConversationUITestAppearance())
+        #endif
         .coordinateSpace(name: "conversation")
         .ignoresSafeArea(.container, edges: .bottom)
         .safeAreaInset(edge: .top, spacing: 0) { conversationNavigationHeader }
