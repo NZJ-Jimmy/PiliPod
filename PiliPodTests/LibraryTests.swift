@@ -34,6 +34,17 @@ struct LibraryTests {
         }
     }
 
+    @Test func unavailableVideoRetainsDisplayMetadata() throws {
+        let json = #"{"id":101,"title":"已失效视频","type":2,"attr":9,"duration":373,"upper":{"name":"epcdiy"},"cnt_info":{"play":97000,"danmaku":560}}"#
+        let media = try JSONDecoder().decode(LibraryMedia.self, from: Data(json.utf8))
+        #expect(media.video == nil)
+        #expect(media.displayVideo.title == "已失效视频")
+        #expect(media.displayVideo.durationFormatted == "06:13")
+        #expect(media.displayVideo.uploader == "epcdiy")
+        #expect(media.displayVideo.playCount != "--")
+        #expect(media.displayVideo.danmakuCount == "560")
+    }
+
     @Test @MainActor func failedPaginationRetriesSamePageAndKeepsExistingItems() async {
         var requestedPages: [Int] = []
         var failedOnce = false

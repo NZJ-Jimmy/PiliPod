@@ -8,17 +8,31 @@ struct LibraryFoldersView: View {
     @State private var pendingUnsubscribe: LibraryFolder?
     @State private var isUnsubscribing = false
     @State private var toastMessage: String?
+    @State private var selectedFolder: LibraryFolder?
+    @Namespace private var folderNamespace
+    private let requiresLogin: Bool
+    private let mediaLoader: (LibraryFolder, Int) async throws -> LibraryPage<LibraryMedia>
+    private var canBrowse: Bool { !requiresLogin || session.isLogin }
 
-    init(subscriptions: Bool) {
+    init(
+        subscriptions: Bool,
+        requiresLogin: Bool = true,
+        loader: ((Int) async throws -> LibraryPage<LibraryFolder>)? = nil,
+        mediaLoader: @escaping (LibraryFolder, Int) async throws -> LibraryPage<LibraryMedia> = { folder, page in
+            try await LibraryService.media(folder: folder, page: page)
+        }
+    ) {
         self.subscriptions = subscriptions
-        _model = StateObject(wrappedValue: LibraryViewModel(loader: { page in
+        self.requiresLogin = requiresLogin
+        self.mediaLoader = mediaLoader
+        _model = StateObject(wrappedValue: LibraryViewModel(loader: loader ?? { page in
             try await LibraryService.folders(subscriptions: subscriptions, page: page)
         }))
     }
 
     var body: some View {
         ScrollView {
-            if !session.isLogin {
+            if !canBrowse {
                 LibraryLoginPrompt(showLogin: $showLogin)
             } else {
                 LazyVStack(spacing: 0) {
@@ -29,12 +43,13 @@ struct LibraryFoldersView: View {
                                     folderCard(folder)
                                         .opacity(0.5)
                                 } else {
-                                    NavigationLink {
-                                        LibraryMediaView(folder: folder)
+                                    Button {
+                                        selectedFolder = folder
                                     } label: {
                                         folderCard(folder)
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityIdentifier("library.folder.\(folder.id)")
                                 }
                             }
                             .contextMenu {
@@ -58,16 +73,16 @@ struct LibraryFoldersView: View {
                 }
             }
         }
-        .refreshable { if session.isLogin { await model.refresh() } }
+        .refreshable { if canBrowse { await model.refresh() } }
         .navigationTitle(subscriptions ? "我的订阅" : "我的收藏")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .task(id: "\(session.isLogin)-\(session.cookieString)") {
             model.reset()
-            if session.isLogin { await model.loadMore() }
+            if canBrowse { await model.loadMore() }
         }
         .onChange(of: session.isLogin) { _, loggedIn in
-            if !loggedIn { model.reset() }
+            if requiresLogin && !loggedIn { model.reset(); selectedFolder = nil }
         }
         .fullScreenCover(isPresented: $showLogin) { LoginPageView() }
         .confirmationDialog("确定取消订阅吗？", isPresented: Binding(
@@ -82,12 +97,22 @@ struct LibraryFoldersView: View {
             Button("保留订阅", role: .cancel) { pendingUnsubscribe = nil }
         }
         .toast(message: $toastMessage)
+        .navigationDestination(item: $selectedFolder) { folder in
+            LibraryMediaView(folder: folder, requiresLogin: requiresLogin, loader: { page in
+                try await mediaLoader(folder, page)
+            })
+            .navigationTransition(.zoom(sourceID: folderHeroID(folder), in: folderNamespace))
+        }
+    }
+
+    private func folderHeroID(_ folder: LibraryFolder) -> String {
+        "library.folder.\(folder.type ?? 11).\(folder.id)"
     }
 
     private func folderCard(_ folder: LibraryFolder) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             LibraryCover(url: folder.cover)
-                .aspectRatio(16 / 10, contentMode: .fit)
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
                 .overlay(alignment: .bottomTrailing) {
                     Text(subscriptions ? folder.kindLabel : (folder.isPrivate ? "私密" : "公开"))
                         .font(.caption2)
@@ -97,9 +122,10 @@ struct LibraryFoldersView: View {
                         .padding(6)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                .matchedTransitionSource(id: folderHeroID(folder), in: folderNamespace)
             Text(folder.title)
                 .font(.subheadline.weight(.medium))
-                .lineLimit(2)
+                .lineLimit(2, reservesSpace: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if subscriptions, let owner = folder.upper?.name {
                 Text(owner).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -107,6 +133,8 @@ struct LibraryFoldersView: View {
             Text(folder.isUnavailable ? "已失效" : "\(folder.mediaCount ?? 0) 个视频")
                 .font(.caption).foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .foregroundStyle(.primary)
         .accessibilityElement(children: .combine)
     }
@@ -136,17 +164,21 @@ struct LibraryMediaView: View {
     @Namespace private var videoNamespace
     @State private var selectedVideo: VideoItem?
     @State private var showLogin = false
+    private let requiresLogin: Bool
+    private var canBrowse: Bool { !requiresLogin || session.isLogin }
 
-    init(folder: LibraryFolder) {
+    init(folder: LibraryFolder, requiresLogin: Bool = true,
+         loader: ((Int) async throws -> LibraryPage<LibraryMedia>)? = nil) {
         self.folder = folder
-        _model = StateObject(wrappedValue: LibraryViewModel(loader: { page in
+        self.requiresLogin = requiresLogin
+        _model = StateObject(wrappedValue: LibraryViewModel(loader: loader ?? { page in
             try await LibraryService.media(folder: folder, page: page)
         }))
     }
 
     var body: some View {
         List {
-            if !session.isLogin {
+            if !canBrowse {
                 LibraryLoginPrompt(showLogin: $showLogin)
                     .libraryRow()
             } else {
@@ -173,22 +205,12 @@ struct LibraryMediaView: View {
                 .libraryRow()
 
                 ForEach(model.entries) { media in
-                    if let video = media.video {
-                        VideoCardSingleView(video: video, progress: nil, namespace: videoNamespace,
-                                            onTap: { selectedVideo = video })
-                            .padding(.vertical, 6)
-                            .libraryRow()
-                    } else {
-                        HStack(spacing: 12) {
-                            Image(systemName: "video.slash").foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(media.title ?? "已失效视频").lineLimit(2)
-                                Text("内容已失效或暂不支持播放").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 12)
+                    VideoCardSingleView(video: media.displayVideo, progress: nil, namespace: videoNamespace,
+                                        unavailable: media.video == nil,
+                                        onTap: { selectedVideo = media.video })
+                        .accessibilityIdentifier("library.media.\(media.id)")
+                        .padding(.vertical, 6)
                         .libraryRow()
-                    }
                 }
 
                 LibraryLoadingFooter(isLoading: model.isLoading, error: model.errorMessage,
@@ -199,16 +221,16 @@ struct LibraryMediaView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .refreshable { if session.isLogin { await model.refresh() } }
+        .refreshable { if canBrowse { await model.refresh() } }
         .navigationTitle(folder.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .task(id: "\(session.isLogin)-\(session.cookieString)") {
             model.reset()
-            if session.isLogin { await model.loadMore() }
+            if canBrowse { await model.loadMore() }
         }
         .onChange(of: session.isLogin) { _, loggedIn in
-            if !loggedIn { model.reset(); selectedVideo = nil }
+            if requiresLogin && !loggedIn { model.reset(); selectedVideo = nil }
         }
         .fullScreenCover(isPresented: $showLogin) { LoginPageView() }
         .navigationDestination(item: $selectedVideo) { video in
@@ -222,15 +244,22 @@ private struct LibraryCover: View {
     let url: String?
 
     var body: some View {
-        CachedAsyncImage(url: URL(string: (url ?? "").replacingOccurrences(of: "http://", with: "https://"))) { phase in
-            if case .success(let image) = phase {
-                image.resizable().scaledToFill()
-            } else {
-                Rectangle().fill(Color(.secondarySystemBackground))
-                    .overlay { Image(systemName: "folder.fill").font(.title).foregroundStyle(.secondary) }
+        Color(.secondarySystemBackground)
+            .overlay {
+                GeometryReader { bounds in
+                    CachedAsyncImage(url: URL(string: (url ?? "").replacingOccurrences(of: "http://", with: "https://"))) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().scaledToFill()
+                        } else {
+                            Rectangle().fill(Color(.secondarySystemBackground))
+                                .overlay { Image(systemName: "folder.fill").font(.title).foregroundStyle(.secondary) }
+                        }
+                    }
+                    .frame(width: bounds.size.width, height: bounds.size.height)
+                    .clipped()
+                }
             }
-        }
-        .clipped()
+            .clipped()
     }
 }
 

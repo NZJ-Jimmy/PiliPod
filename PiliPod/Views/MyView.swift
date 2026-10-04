@@ -17,6 +17,7 @@ struct MyView: View {
     @State private var showSubscriptions = false
     @State private var showFavorites = false
     @State private var followingRoute: MyFollowingRoute?
+    @Namespace private var libraryNamespace
 
     var body: some View {
         NavigationStack {
@@ -62,6 +63,7 @@ struct MyView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("我的收藏")
                     .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18))
+                    .matchedTransitionSource(id: "my.favorites", in: libraryNamespace)
                     .padding(.horizontal, 30)
 
                     Spacer()
@@ -93,9 +95,11 @@ struct MyView: View {
             }
             .navigationDestination(isPresented: $showSubscriptions) {
                 LibraryFoldersView(subscriptions: true)
+                    .navigationTransition(.zoom(sourceID: "my.subscriptions", in: libraryNamespace))
             }
             .navigationDestination(isPresented: $showFavorites) {
                 LibraryFoldersView(subscriptions: false)
+                    .navigationTransition(.zoom(sourceID: "my.favorites", in: libraryNamespace))
             }
             .navigationDestination(item: $followingRoute) { route in
                 FollowingListView(mid: route.mid)
@@ -231,6 +235,7 @@ struct MyView: View {
                 systemImage: "rectangle.stack.badge.person.crop",
                 action: { showSubscriptions = true }
             )
+            .matchedTransitionSource(id: "my.subscriptions", in: libraryNamespace)
 
             quickActionButton(
                 title: L10n.string("稍后再看"),

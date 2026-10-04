@@ -81,10 +81,15 @@ struct LibraryMedia: Decodable, Identifiable {
     var video: VideoItem? {
         guard ((attr ?? 0) & 9) == 0, type == nil || type == 2,
               let bvid, !bvid.isEmpty else { return nil }
+        return displayVideo
+    }
+
+    // Keep metadata and the standard card geometry even when playback is unavailable.
+    var displayVideo: VideoItem {
         return VideoItem(
-            bvid: bvid, cid: nil,
+            bvid: bvid ?? "library-unavailable-\(id)", cid: nil,
             cover: (cover ?? "").replacingOccurrences(of: "http://", with: "https://"),
-            title: title ?? "未命名视频",
+            title: title ?? (bvid == nil ? "已失效视频" : "未命名视频"),
             playCount: cntInfo?.play.map(VideoItem.formatCount) ?? "--",
             danmakuCount: cntInfo?.danmaku.map(VideoItem.formatCount) ?? "--",
             uploader: upper?.name ?? "", duration: duration ?? 0,
