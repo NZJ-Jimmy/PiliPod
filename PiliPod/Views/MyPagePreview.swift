@@ -49,7 +49,6 @@ struct MyPagePreview: View {
                     Button("重试") { retry += 1 }
                 }
                 .frame(maxWidth: .infinity, minHeight: 100)
-                .padding(.horizontal, 18)
             } else if videos.isEmpty && folders.isEmpty {
                 message("暂无内容")
             } else {
@@ -86,7 +85,6 @@ struct MyPagePreview: View {
     private func carousel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 12, content: content)
-                .padding(.horizontal, 18)
         }
         .scrollIndicators(.hidden)
     }

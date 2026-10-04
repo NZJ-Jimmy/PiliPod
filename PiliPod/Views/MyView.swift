@@ -24,7 +24,6 @@ struct MyView: View {
     @State private var selectedPreviewVideo: VideoItem?
     @State private var selectedPreviewFolder: LibraryFolder?
     @Namespace private var previewNamespace
-    @Namespace private var libraryNamespace
 
     var body: some View {
         NavigationStack {
@@ -50,10 +49,15 @@ struct MyView: View {
                     headerView
                         .padding(.horizontal, 30)
 
-                    ForEach(pageSettings.settings.normalized.order) { section in
-                        librarySection(section)
+                    VStack(spacing: 0) {
+                        ForEach(pageSettings.settings.normalized.order) { section in
+                            librarySection(section)
+                            if section != pageSettings.settings.normalized.order.last {
+                                Divider()
+                            }
+                        }
                     }
-                    .padding(.horizontal, 30)
+                    .padding(.horizontal, 24)
                     Spacer()
                 }
             }
@@ -105,11 +109,9 @@ struct MyView: View {
             }
             .navigationDestination(isPresented: $showSubscriptions) {
                 LibraryFoldersView(subscriptions: true)
-                    .navigationTransition(.zoom(sourceID: "my.subscriptions", in: libraryNamespace))
             }
             .navigationDestination(isPresented: $showFavorites) {
                 LibraryFoldersView(subscriptions: false)
-                    .navigationTransition(.zoom(sourceID: "my.favorites", in: libraryNamespace))
             }
             .navigationDestination(item: $followingRoute) { route in
                 FollowingListView(mid: route.mid)
@@ -230,41 +232,39 @@ struct MyView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Button {
+                    openFullList(section)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(LocalizedStringKey(section.title))
+                            .font(.title2.weight(.bold))
+                        Image(systemName: "chevron.right")
+                            .font(.body.weight(.semibold)).foregroundStyle(.tertiary)
+                        Spacer(minLength: 8)
+                    }
+                    .padding(.vertical, 16)
+                    .frame(minHeight: 72)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityLabel("\(section.title)，查看全部")
+                .accessibilityIdentifier("my.all.\(section.rawValue)")
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         if expandedSections.contains(section) { expandedSections.remove(section) }
                         else { expandedSections.insert(section) }
                     }
                 } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: section.symbol)
-                            .foregroundStyle(Color("BiliPink"))
-                            .frame(width: 24)
-                        Text(LocalizedStringKey(section.title)).font(.headline)
-                        Image(systemName: expandedSections.contains(section) ? "chevron.up" : "chevron.down")
-                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        Spacer(minLength: 8)
-                    }
-                    .padding(.leading, 18)
-                    .frame(minHeight: 58)
-                    .contentShape(Rectangle())
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .rotationEffect(.degrees(expandedSections.contains(section) ? 90 : 0))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 30, height: 30)
+                        .background(Color(.tertiarySystemFill), in: Circle())
+                        .frame(width: 44, height: 72)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("\(section.title)，\(expandedSections.contains(section) ? "收起" : "展开")")
                 .accessibilityIdentifier("my.section.\(section.rawValue)")
                 .accessibilityValue(expandedSections.contains(section) ? "已展开" : "已收起")
-                Button {
-                    openFullList(section)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("全部")
-                        Image(systemName: "chevron.right")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 58)
-                    .contentShape(Rectangle())
-                }
-                .accessibilityLabel("\(section.title)，查看全部")
-                .accessibilityIdentifier("my.all.\(section.rawValue)")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
@@ -272,11 +272,9 @@ struct MyView: View {
                 MyPagePreview(section: section,
                     openVideo: { selectedPreviewVideo = $0 },
                     openFolder: { selectedPreviewFolder = $0 })
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(.opacity)
             }
         }
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
-        .matchedTransitionSource(id: "my.\(section.rawValue)", in: libraryNamespace)
     }
 
     private func openFullList(_ section: MyPageSection) {
