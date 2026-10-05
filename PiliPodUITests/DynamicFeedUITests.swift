@@ -55,15 +55,52 @@ final class DynamicFeedUITests: XCTestCase {
         let hidden = NSPredicate(format: "hittable == false")
         expectation(for: hidden, evaluatedWith: video)
         waitForExpectations(timeout: 10)
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.55))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.55))
-        start.press(forDuration: 0.05, thenDragTo: end)
+        app.pinch(withScale: 0.4, velocity: -1)
         let returned = NSPredicate(format: "hittable == true")
         expectation(for: returned, evaluatedWith: video)
         waitForExpectations(timeout: 10)
         XCTAssertTrue(video.label.contains("刷新1"))
         XCTAssertEqual(video.frame.minY, originalY, accuracy: 8)
         attach(app, name: "Interactive return retains scroll position")
+    }
+
+    @MainActor
+    func testArticleZoomReturnPreservesFeed() {
+        let app = launchFeed()
+        let feed = app.descendants(matching: .any)["dynamicFeedScroll"]
+        let article = app.buttons["dynamicFeed.fixture1.preview"]
+        for _ in 0..<8 {
+            if article.isHittable { break }
+            feed.swipeUp()
+        }
+        XCTAssertTrue(article.isHittable)
+        let originalY = article.frame.minY
+        article.tap()
+        XCTAssertTrue(app.navigationBars["测试专栏 · 刷新1"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(article.waitForExistence(timeout: 10))
+        XCTAssertTrue(article.isHittable)
+        XCTAssertEqual(article.frame.minY, originalY, accuracy: 8)
+        attach(app, name: "Article zoom return retains position")
+    }
+
+    @MainActor
+    func testTextDynamicZoomOpensDetail() {
+        let app = launchFeed()
+        let feed = app.descendants(matching: .any)["dynamicFeedScroll"]
+        let text = app.staticTexts["测试文字动态 · 刷新1"]
+        for _ in 0..<8 {
+            if text.isHittable { break }
+            feed.swipeUp()
+        }
+        XCTAssertTrue(text.isHittable)
+        let originalY = text.frame.minY
+        text.tap()
+        XCTAssertTrue(app.navigationBars["动态详情"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(text.isHittable)
+        XCTAssertEqual(text.frame.minY, originalY, accuracy: 8)
+        attach(app, name: "Text dynamic zoom return retains position")
     }
 
     @MainActor

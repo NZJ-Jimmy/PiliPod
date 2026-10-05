@@ -10,6 +10,7 @@ struct DynamicCardView: View {
     var showsFullTextByDefault = false
     var onTapDetail: (() -> Void)? = nil
     var videoSourcePrefix = "dynamicFeed"
+    var onPreviewTap: ((UserSpaceDynamicItem.PreviewCard) -> Void)? = nil
 
     static func videoSourceID(prefix: String, itemID: String, bvid: String) -> String {
         "\(prefix).\(itemID).\(bvid)"
@@ -172,10 +173,14 @@ struct DynamicCardView: View {
     }
 
     private func genericPreview(_ preview: UserSpaceDynamicItem.PreviewCard) -> some View {
-        Button { if let link = preview.link, let url = URL(string: link) { openURL(url) } } label: {
+        Button {
+            if let onPreviewTap { onPreviewTap(preview) }
+            else if let link = preview.link, let url = URL(string: link) { openURL(url) }
+        } label: {
             previewRow(title: preview.title, subtitle: preview.subtitle ?? "", cover: preview.coverURL, badge: nil)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("\(videoSourcePrefix).\(item.id).preview")
         .disabled(preview.link == nil)
     }
 

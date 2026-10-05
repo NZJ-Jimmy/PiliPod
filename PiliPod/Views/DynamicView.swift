@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 struct DynamicView: View {
     @StateObject private var viewModel = DynamicViewModel()
@@ -8,6 +9,9 @@ struct DynamicView: View {
     @State private var selectedLiveRoom: LiveCardModel?
     @State private var selectedAuthorMID: Int?
     @State private var selectedDynamic: UserSpaceDynamicItem?
+    @State private var selectedWebPreview: DynamicWebPreview?
+    @State private var videoSourceID = ""
+    @State private var liveSourceID = ""
     @Namespace private var videoHeroNamespace
 
 #if DEBUG
@@ -66,13 +70,15 @@ struct DynamicView: View {
                 VideoDetailPage(
                     video: video,
                     namespace: videoHeroNamespace,
+                    usesNativeZoomTransition: true,
                     onBack: { withAnimation { selectedVideo = nil } }
                 )
-                .navigationTransition(.automatic)
+                .navigationTransition(.zoom(sourceID: videoSourceID, in: videoHeroNamespace))
                 .accessibilityIdentifier("dynamicVideoDetail")
             }
             .navigationDestination(item: $selectedLiveRoom) { room in
                 LivePlaybackPage(room: room)
+                    .navigationTransition(.zoom(sourceID: liveSourceID, in: videoHeroNamespace))
             }
             .navigationDestination(item: $selectedAuthorMID) { mid in
                 UserSpaceView(mid: mid)
@@ -80,10 +86,20 @@ struct DynamicView: View {
             .navigationDestination(item: $selectedDynamic) { dynamic in
                 UserSpaceDynamicDetailView(
                     item: dynamic,
-                    onVideoTap: openVideo,
-                    onLiveTap: openLive,
-                    onAuthorTap: { selectedAuthorMID = $0 }
+                    onVideoTap: { openVideo($0, sourceID: "dynamicDetail.\(dynamic.id)") },
+                    onLiveTap: { openLive($0, sourceID: "dynamicDetail.\(dynamic.id)") },
+                    onAuthorTap: { selectedAuthorMID = $0 },
+                    transitionNamespace: videoHeroNamespace,
+                    onPreviewTap: { openPreview($0, sourceID: "dynamicDetail.\(dynamic.id)") }
                 )
+                .navigationTransition(.zoom(sourceID: "dynamicFeed.\(dynamic.id)", in: videoHeroNamespace))
+            }
+            .navigationDestination(item: $selectedWebPreview) { preview in
+                DynamicWebPreviewPage(url: preview.url)
+                    .navigationTitle(preview.title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .navigationTransition(.zoom(sourceID: preview.sourceID, in: videoHeroNamespace))
+                    .accessibilityIdentifier("dynamicWebPreview")
             }
         }
     }
@@ -213,12 +229,14 @@ struct DynamicView: View {
                 ForEach(viewModel.items) { item in
                     DynamicCardView(
                         item: item,
-                        onVideoTap: openVideo,
-                        onLiveTap: openLive,
+                        onVideoTap: { openVideo($0, sourceID: "dynamicFeed.\(item.id)") },
+                        onLiveTap: { openLive($0, sourceID: "dynamicFeed.\(item.id)") },
                         onAuthorTap: { selectedAuthorMID = $0 },
                         onCommentTap: { _ in selectedDynamic = item },
-                        onTapDetail: { selectedDynamic = item }
+                        onTapDetail: { selectedDynamic = item },
+                        onPreviewTap: { openPreview($0, sourceID: "dynamicFeed.\(item.id)") }
                     )
+                    .matchedTransitionSource(id: "dynamicFeed.\(item.id)", in: videoHeroNamespace)
                     .id(item.id)
                     .onAppear { Task { await viewModel.loadMoreIfNeeded(current: item) } }
                 }
@@ -238,8 +256,9 @@ struct DynamicView: View {
         }
     }
 
-    private func openVideo(_ video: UserSpaceDynamicItem.Video) {
+    private func openVideo(_ video: UserSpaceDynamicItem.Video, sourceID: String) {
         guard let bvid = video.bvid, !bvid.isEmpty else { return }
+        videoSourceID = sourceID
         selectedVideo = VideoItem(
             bvid: bvid, cid: nil, cover: video.coverURL ?? "", title: video.title,
             playCount: VideoItem.formatCount(video.playCount),
@@ -249,11 +268,34 @@ struct DynamicView: View {
         )
     }
 
-    private func openLive(_ live: UserSpaceDynamicItem.Live) {
+    private func openLive(_ live: UserSpaceDynamicItem.Live, sourceID: String) {
+        liveSourceID = sourceID
         selectedLiveRoom = LiveCardModel(
             roomId: live.roomID, uid: nil, title: live.title, coverURL: live.coverURL ?? "",
             onlineCount: live.onlineCount, anchorName: "", faceURL: "",
             areaName: live.areaName, badgeText: "直播中", link: live.link
         )
     }
+
+    private func openPreview(_ preview: UserSpaceDynamicItem.PreviewCard, sourceID: String) {
+        guard let link = preview.link, let url = URL(string: link) else { return }
+        selectedWebPreview = DynamicWebPreview(url: url, title: preview.title, sourceID: sourceID)
+    }
+}
+
+private struct DynamicWebPreview: Identifiable, Hashable {
+    let url: URL
+    let title: String
+    let sourceID: String
+    var id: String { "\(sourceID).\(url.absoluteString)" }
+}
+
+private struct DynamicWebPreviewPage: UIViewRepresentable {
+    let url: URL
+    func makeUIView(context: Context) -> WKWebView {
+        let view = WKWebView()
+        view.load(URLRequest(url: url))
+        return view
+    }
+    func updateUIView(_ view: WKWebView, context: Context) {}
 }
