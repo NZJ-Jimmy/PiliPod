@@ -767,7 +767,7 @@ struct VideoDetailPage: View {
                             requestPageDismissal()
                         }
                     },
-                including: usesNativeZoomTransition ? .none : .all
+                including: usesNativeZoomTransition ? .subviews : .all
             )
             .allowsHitTesting(!isClosing)
         }
