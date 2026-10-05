@@ -147,6 +147,13 @@ final class ConversationUITests: XCTestCase {
         if onboarding.waitForExistence(timeout: 10) { onboarding.tap() }
         let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
         XCTAssertTrue(photo.waitForExistence(timeout: 25), "Native photo thumbnails should load")
+        // The remote picker can finish loading its grid before presenting onboarding.
+        // Dismiss a late prompt as well; its grid remains in the accessibility tree behind it.
+        if onboarding.waitForExistence(timeout: 10) {
+            onboarding.tap()
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
+                evaluatedWith: onboarding)], timeout: 5), .completed)
+        }
         capture(app, "conversation-photos-before-selection")
         // Native grid image accessibility nodes have no hittable point; tap their actual on-screen center.
         // A remote picker can retain accessibility nodes for scrolled-off thumbnails.
