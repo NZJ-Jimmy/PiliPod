@@ -1142,9 +1142,10 @@ class BiliAPI {
 
     // MARK: - 获取全部动态（Web）
 
-    func fetchAllDynamics(offset: String? = nil) async throws -> UserSpaceDynamicPageResult {
+    func fetchAllDynamics(offset: String? = nil, category: DynamicCategory = .all) async throws -> UserSpaceDynamicPageResult {
         var components = URLComponents(string: "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all")
         var queryItems = [
+            URLQueryItem(name: "type", value: category.apiType),
             URLQueryItem(name: "platform", value: "web"),
             URLQueryItem(name: "web_location", value: "333.1387"),
             URLQueryItem(name: "features", value: "itemOpusStyle,listOnlyfans,opusBigCover,onlyfansVote,forwardListHidden,decorationCard,commentsNewVersion,onlyfansAssetsV2,ugcDelete,onlyfansQaCard")
@@ -1173,6 +1174,27 @@ class BiliAPI {
         guard let payload = decoded.data else { throw APIError.requestFailed }
         let items = (payload.items ?? []).compactMap { UserSpaceDynamicItem.make(from: $0) }
         return UserSpaceDynamicPageResult(items: items, hasMore: payload.hasMore ?? false, nextOffset: payload.offset)
+    }
+
+    // MARK: - 动态页常访问 UP 主
+
+    func fetchDynamicAuthors() async throws -> [DynamicFeedAuthor] {
+        guard let url = URL(string: "https://api.bilibili.com/x/polymer/web-dynamic/v1/portal?up_list_more=1&web_location=333.1365") else {
+            throw APIError.invalidURL
+        }
+        var request = makeRequest(url: url)
+        request.setValue("https://t.bilibili.com/", forHTTPHeaderField: "Referer")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let response = response as? HTTPURLResponse, (200 ... 299).contains(response.statusCode) else {
+            throw APIError.requestFailed
+        }
+        let decoded = try JSONDecoder().decode(DynamicPortalResponse.self, from: data)
+        guard decoded.code == 0 else {
+            throw APIError.businessError(code: decoded.code, message: decoded.message)
+        }
+        guard let payload = decoded.data else { throw APIError.requestFailed }
+        var seen = Set<Int>()
+        return (payload.upList?.items ?? []).filter { $0.mid > 0 && seen.insert($0.mid).inserted }
     }
 
     // MARK: - 获取个人空间投稿
