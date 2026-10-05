@@ -1,5 +1,13 @@
 # 私信界面重构说明
 
+## 分支选择
+
+- `codex/private-message-native`：本分支，使用仓库内的原生 SwiftUI 开源组件，无第三方聊天 SDK。基于接入 Swift Chat 前的最后提交 `0c711a1`，保留原生时间线、输入栏和 `ConversationUITests`。
+- `codex/private-message-swift-chat`：使用 Swift Chat SDK 的另一条分支，基于 `1d245f0`，使用 SDK 的 Chat、输入栏和 `SwiftChatConversationUITests`。
+- `codex/private-message-send`：保留拆分前的历史及已有 PR，后续两种实现分别在上述分支迭代。
+
+两种实现共用现有 Bilibili 发送服务；本分支没有引入 Exyte/Chat。
+
 ## 架构
 
 现有 Bilibili API、认证和 protobuf/REST 数据模型保持不变。页面拆为会话状态、展示适配和视图三个职责。
