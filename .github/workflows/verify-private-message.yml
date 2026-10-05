@@ -1,8 +1,6 @@
 name: Verify private messages and build test IPA
 
 on:
-  push:
-    branches: [codex/private-message-swift-chat]
   workflow_dispatch:
 
 permissions:

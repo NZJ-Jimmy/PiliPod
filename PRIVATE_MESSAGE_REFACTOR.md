@@ -1,10 +1,12 @@
 # Swift Chat 私信界面说明
 
+> **Deprecated**：本分支已弃用，仅保留历史。后续私信开发及测试 IPA 使用 `codex/private-message-native`，不再继续迭代 Swift Chat 方案。
+
 ## 分支选择
 
 - `codex/private-message-swift-chat`：本分支，基于 `1d245f0`，使用 Swift Chat SDK。
 - `codex/private-message-native`：基于接入 SDK 前的最后提交 `0c711a1`，使用仓库内的原生 SwiftUI 开源组件，没有第三方聊天 SDK，也未引入 Exyte/Chat。
-- `codex/private-message-send`：保留拆分前的历史及已有 PR，后续两种实现分别在上述分支迭代。
+- `codex/private-message-send`：保留拆分前的历史及已有 PR；其 Swift Chat 方案同样已弃用。
 
 ## 当前实现
 
@@ -24,7 +26,7 @@
 
 ## 验证
 
-本分支工作流 `.github/workflows/verify-private-message.yml` 监听 `codex/private-message-swift-chat`，运行 `PiliPodTests` 和 `SwiftChatConversationUITests`，导出截图并归档未签名 IPA。
+本分支工作流 `.github/workflows/verify-private-message.yml` 仅保留手动触发，运行 `PiliPodTests` 和 `SwiftChatConversationUITests`，导出截图并归档未签名 IPA。Deprecated 分支不再因 push 自动构建。
 
 拆分前代码提交 `1d245f0` 的 Actions 已通过 33 项单元测试、2 项界面测试、Release 归档及 IPA 打包：
 https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37217327933

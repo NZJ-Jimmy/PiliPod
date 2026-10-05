@@ -1,5 +1,7 @@
 # PiliPod
 
+> **Deprecated：Swift Chat 私信实验分支已弃用。** 后续私信开发及测试 IPA 使用 `codex/private-message-native` 原生 SwiftUI 分支。本分支仅保留历史，不再继续维护。
+
 用 Swift 开发的 Bilibili 客户端
 
 ## 适配平台
