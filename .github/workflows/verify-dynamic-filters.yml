@@ -1,4 +1,4 @@
-name: Verify dynamic filters
+name: Verify dynamic filters and build test IPA
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -41,10 +41,42 @@ jobs:
             -resultBundlePath build/DynamicFilterTests.xcresult \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             | tee build/test.log
+      - name: Archive unsigned iOS app
+        run: |
+          set -o pipefail
+          xcodebuild archive -project PiliPod.xcodeproj -scheme PiliPod \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/PiliPod.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER="" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            | tee build/archive.log
+      - name: Package standalone dynamic filter test IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/PiliPod.xcarchive/Products/Applications/PiliPod.app build/Payload/
+          cd build
+          IPA_NAME="PiliPod-dynamic-filters-${GITHUB_SHA:0:7}.ipa"
+          zip -qry "$IPA_NAME" Payload
+          unzip -t "$IPA_NAME"
+          shasum -a 256 "$IPA_NAME" > "$IPA_NAME.sha256"
+          printf 'Branch: %s\nCommit: %s\nRun: %s\nUnsigned standalone dynamic filter build; no integration merge.\n' \
+            "$GITHUB_REF_NAME" "$GITHUB_SHA" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            > source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiliPod-dynamic-filters-test-IPA
+          path: |
+            build/PiliPod-dynamic-filters-*.ipa
+            build/PiliPod-dynamic-filters-*.ipa.sha256
+            build/source.txt
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Dynamic-filter-test-results
           path: |
             build/test.log
+            build/archive.log
             build/DynamicFilterTests.xcresult
