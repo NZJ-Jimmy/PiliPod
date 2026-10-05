@@ -8,16 +8,16 @@ final class DynamicFeedUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-dynamic-feed-ui-testing", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
-        XCTAssertTrue(app.buttons["dynamicFeed.fixture0.BV1xx411c7mD"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["dynamicFeed.fixture0.BV1zz411zzzz"].waitForExistence(timeout: 15))
         return app
     }
 
     @MainActor
     func testPullToRefreshShowsReplacementWithoutContinueButton() {
         let app = launchFeed()
-        let first = app.buttons["dynamicFeed.fixture0.BV1xx411c7mD"]
+        let first = app.buttons["dynamicFeed.fixture0.BV1zz411zzzz"]
         XCTAssertTrue(first.label.contains("刷新1"))
-        app.scrollViews["dynamicFeedScroll"].swipeDown()
+        app.descendants(matching: .any)["dynamicFeedScroll"].swipeDown()
         let refreshed = NSPredicate(format: "label CONTAINS %@", "刷新2")
         expectation(for: refreshed, evaluatedWith: first)
         waitForExpectations(timeout: 15)
@@ -36,15 +36,15 @@ final class DynamicFeedUITests: XCTestCase {
         let end = start.withOffset(CGVector(dx: 0, dy: 150))
         start.press(forDuration: 0.05, thenDragTo: end)
         XCTAssertEqual(strip.frame.minY, before.minY, accuracy: 2)
-        XCTAssertTrue(app.buttons["dynamicFeed.fixture0.BV1xx411c7mD"].label.contains("刷新1"))
+        XCTAssertTrue(app.buttons["dynamicFeed.fixture0.BV1zz411zzzz"].label.contains("刷新1"))
         attach(app, name: "Author strip remains fixed")
     }
 
     @MainActor
     func testInteractiveVideoReturnPreservesFeedAndScrollPosition() {
         let app = launchFeed()
-        let feed = app.scrollViews["dynamicFeedScroll"]
-        let video = app.buttons["dynamicFeed.fixture3.BV1xx411c7mD"]
+        let feed = app.descendants(matching: .any)["dynamicFeedScroll"]
+        let video = app.buttons["dynamicFeed.fixture3.BV1zz411zzzz"]
         for _ in 0..<8 {
             if video.isHittable { break }
             feed.swipeUp()

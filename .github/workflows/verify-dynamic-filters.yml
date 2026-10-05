@@ -38,6 +38,7 @@ jobs:
           xcodebuild test -project PiliPod.xcodeproj -scheme PiliPod \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -only-testing:PiliPodTests -only-testing:PiliPodUITests/DynamicFeedUITests -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES -maximum-test-execution-time-allowance 180 \
             -resultBundlePath build/DynamicFilterTests.xcresult \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             | tee build/test.log

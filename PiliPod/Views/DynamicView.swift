@@ -6,7 +6,6 @@ struct DynamicView: View {
     @State private var showingAuthorPicker = false
     @State private var selectedVideo: VideoItem?
     @State private var selectedVideoSourceID = ""
-    @State private var feedScrollPosition = ScrollPosition(edge: .top)
     @State private var selectedLiveRoom: LiveCardModel?
     @State private var selectedAuthorMID: Int?
     @State private var selectedDynamic: UserSpaceDynamicItem?
@@ -27,13 +26,15 @@ struct DynamicView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 filters
-                ScrollView {
+                List {
                     content
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 12)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .id(requestKey)
-                .scrollPosition($feedScrollPosition)
                 .accessibilityIdentifier("dynamicFeedScroll")
                 .refreshable {
                     guard accountMID != nil else { return }
@@ -51,7 +52,6 @@ struct DynamicView: View {
                 guard accountMID != nil else { return }
                 await viewModel.loadAuthorsIfNeeded()
             }
-            .onChange(of: requestKey) { _, _ in feedScrollPosition = ScrollPosition(edge: .top) }
             .onChange(of: accountMID) { _, _ in
                 showingAuthorPicker = false
                 viewModel.resetAccount()
@@ -214,7 +214,7 @@ struct DynamicView: View {
                 }
             }
         } else {
-            LazyVStack(spacing: 12) {
+            Group {
                 ForEach(viewModel.items) { item in
                     DynamicCardView(
                         item: item,

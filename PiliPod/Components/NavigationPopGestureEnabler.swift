@@ -3,9 +3,8 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 
-/// Re-enables UIKit's own edge-pop recognizer without replacing its delegate.
-/// The delegate is responsible for rejecting an interactive pop during an
-/// in-flight transition, so it must remain under UIKit's control.
+/// Uses UIKit's own interactive transition, with a proxy that allows a custom
+/// hidden back button while still rejecting root-page and in-flight pops.
 struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Controller {
         Controller()
@@ -101,7 +100,10 @@ private final class PopGestureDelegateProxy: NSObject, UIGestureRecognizerDelega
               !navigationController.isBeingDismissed
         else { return false }
 
-        return original?.gestureRecognizerShouldBegin?(gestureRecognizer) ?? true
+        // UIKit's original delegate may reject a hidden system back button.
+        // The player supplies its own back control, so that veto would disable
+        // edge-pop even though the stack is eligible for an interactive return.
+        return true
     }
 
     func gestureRecognizer(

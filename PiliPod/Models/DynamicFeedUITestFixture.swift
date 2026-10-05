@@ -15,7 +15,7 @@ enum DynamicFeedUITestFixture {
                 let raw = try JSONDecoder().decode(SpaceDynamicJSONValue.self, from: Data("""
                 {"id_str":"fixture\(index)","type":"DYNAMIC_TYPE_AV","modules":{
                 "module_author":{"mid":42,"name":"测试 UP","pub_time":"刚刚"},
-                "module_dynamic":{"major":{"archive":{"bvid":"BV1xx411c7mD","aid":1,
+                "module_dynamic":{"major":{"archive":{"bvid":"BV1zz411zzzz","aid":1,
                 "title":"测试视频 \(index) · 刷新\(count)","duration_text":"00:30","stat":{"play":10,"danmaku":0}}}}
                 }}
                 """.utf8))
