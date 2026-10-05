@@ -59,7 +59,8 @@ struct UserSpaceDynamicDetailView: View {
             onCommentTap: { _ in },
             showsFullTextByDefault: true,
             videoSourcePrefix: "dynamicDetail",
-            onPreviewTap: onPreviewTap
+            onPreviewTap: onPreviewTap,
+            transitionNamespace: transitionNamespace
         )
         if let transitionNamespace {
             card.matchedTransitionSource(id: "dynamicDetail.\(item.id)", in: transitionNamespace)

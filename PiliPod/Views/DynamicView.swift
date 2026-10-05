@@ -77,7 +77,7 @@ struct DynamicView: View {
                 .accessibilityIdentifier("dynamicVideoDetail")
             }
             .navigationDestination(item: $selectedLiveRoom) { room in
-                LivePlaybackPage(room: room)
+                LivePlaybackPage(room: room, usesNativeZoomTransition: true)
                     .navigationTransition(.zoom(sourceID: liveSourceID, in: videoHeroNamespace))
             }
             .navigationDestination(item: $selectedAuthorMID) { mid in
@@ -234,7 +234,8 @@ struct DynamicView: View {
                         onAuthorTap: { selectedAuthorMID = $0 },
                         onCommentTap: { _ in selectedDynamic = item },
                         onTapDetail: { selectedDynamic = item },
-                        onPreviewTap: { openPreview($0, sourceID: "dynamicFeed.\(item.id)") }
+                        onPreviewTap: { openPreview($0, sourceID: "dynamicFeed.\(item.id)") },
+                        transitionNamespace: videoHeroNamespace
                     )
                     .matchedTransitionSource(id: "dynamicFeed.\(item.id)", in: videoHeroNamespace)
                     .id(item.id)

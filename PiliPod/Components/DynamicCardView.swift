@@ -11,6 +11,7 @@ struct DynamicCardView: View {
     var onTapDetail: (() -> Void)? = nil
     var videoSourcePrefix = "dynamicFeed"
     var onPreviewTap: ((UserSpaceDynamicItem.PreviewCard) -> Void)? = nil
+    var transitionNamespace: Namespace.ID? = nil
 
     static func videoSourceID(prefix: String, itemID: String, bvid: String) -> String {
         "\(prefix).\(itemID).\(bvid)"
@@ -42,7 +43,12 @@ struct DynamicCardView: View {
         .onAppear { if showsFullTextByDefault { showsFullText = true; showsOriginalFullText = true } }
         .fullScreenCover(isPresented: Binding(get: { selectedImageURL != nil }, set: { if !$0 { selectedImageURL = nil } })) {
             if let url = selectedImageURL {
-                FullscreenImageViewer(imageURL: url, onDismiss: { selectedImageURL = nil })
+                if let transitionNamespace {
+                    FullscreenImageViewer(imageURL: url, onDismiss: { selectedImageURL = nil })
+                        .navigationTransition(.zoom(sourceID: "\(videoSourcePrefix).\(item.id)", in: transitionNamespace))
+                } else {
+                    FullscreenImageViewer(imageURL: url, onDismiss: { selectedImageURL = nil })
+                }
             }
         }
         .sheet(isPresented: Binding(get: { selectedWebURL != nil }, set: { if !$0 { selectedWebURL = nil } })) {
