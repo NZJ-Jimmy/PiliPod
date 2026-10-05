@@ -12,17 +12,17 @@
 
 | 功能分支 | PR | 目标分支 | 整合状态 |
 | --- | --- | --- | --- |
-| `codex/my-library` | [#1](https://github.com/NZJ-Jimmy/PiliPod/pull/1) | `main` | 已纳入 |
-| `codex/gesture-lock` | [#3](https://github.com/NZJ-Jimmy/PiliPod/pull/3) | `main` | 已纳入 |
-| `codex/privacy-multi-account` | [#4](https://github.com/NZJ-Jimmy/PiliPod/pull/4) | `main` | 已纳入 |
-| `codex/video-detail-back-gesture` | [#5](https://github.com/NZJ-Jimmy/PiliPod/pull/5) | `main` | 已纳入 |
-| `codex/avplayer-navigation-stutter` | [#6](https://github.com/NZJ-Jimmy/PiliPod/pull/6) | `main` | 已纳入 |
-| `codex/video-detail-comment-preview` | [#7](https://github.com/NZJ-Jimmy/PiliPod/pull/7) | `main` | 已纳入 |
-| `codex/video-danmaku-controls` | [#8](https://github.com/NZJ-Jimmy/PiliPod/pull/8) | `main` | 已纳入 |
-| `codex/my-page-layout` | [#9](https://github.com/NZJ-Jimmy/PiliPod/pull/9) | `codex/my-library` | 已纳入，依赖 #1 |
-| `codex/private-message-native` | [#10](https://github.com/NZJ-Jimmy/PiliPod/pull/10) | `main` | 已纳入 |
+| `codex/my-library` | [#1](https://github.com/NZJ-Jimmy/PiliPod/pull/1) | `codex/integration` | 已合并（Merged） |
+| `codex/gesture-lock` | [#3](https://github.com/NZJ-Jimmy/PiliPod/pull/3) | `codex/integration` | 已合并（Merged） |
+| `codex/privacy-multi-account` | [#4](https://github.com/NZJ-Jimmy/PiliPod/pull/4) | `codex/integration` | 已合并（Merged） |
+| `codex/video-detail-back-gesture` | [#5](https://github.com/NZJ-Jimmy/PiliPod/pull/5) | `codex/integration` | 已合并（Merged） |
+| `codex/avplayer-navigation-stutter` | [#6](https://github.com/NZJ-Jimmy/PiliPod/pull/6) | `codex/integration` | 已合并（Merged） |
+| `codex/video-detail-comment-preview` | [#7](https://github.com/NZJ-Jimmy/PiliPod/pull/7) | `codex/integration` | 已合并（Merged） |
+| `codex/video-danmaku-controls` | [#8](https://github.com/NZJ-Jimmy/PiliPod/pull/8) | `codex/integration` | 已合并（Merged） |
+| `codex/my-page-layout` | [#9](https://github.com/NZJ-Jimmy/PiliPod/pull/9) | `codex/integration` | 已合并（Merged），功能依赖 #1 |
+| `codex/private-message-native` | [#10](https://github.com/NZJ-Jimmy/PiliPod/pull/10) | `codex/integration` | 已合并（Merged） |
 
-#4–#10 新建为 Draft。#1 与 #3 保留原来的审查状态。#1 合入自己的 `main` 后，将 #9 的 base 改为 `main`。
+2026-10-05：#1、#3–#10 已正式合并到 `codex/integration`，GitHub 状态均为 Merged。为补录先前的本地整合，每个功能分支增加了一条不改代码的空提交，再通过 PR 合并；整合分支文件内容与补录前完全一致。#11 仍为指向 main 的整合 Draft PR，不合并。#9 的功能仍依赖 #1；将来向上游贡献时另开独立 PR，按依赖安排提交顺序。
 
 ## 历史分支
 
@@ -34,9 +34,9 @@
 
 ## 后续操作
 
-新功能从最新的 `main` 创建 `codex/<功能名>`，推送后创建自己的 Draft PR；如依赖其他功能，明确标注依赖并选择相应 base。
+新功能从最新的 `main` 创建 `codex/<功能名>`，推送后创建指向自己 `codex/integration` 的 Draft PR；准备组合测试时通过该 PR 合并。功能分支保持独立，不从整合分支开发。依赖其他功能时明确标注，按需要先使用依赖分支作为 base；提交上游时另开 PR。已合并的 PR 不复用来跟踪后续新增提交，应创建新的增量 PR。
 
-更新组合版本时：
+通过 PR 合并是新的默认流程。需要手动整合时，以下命令仍可使用，但应核实相应 PR 的状态：
 
 ```powershell
 git fetch origin
