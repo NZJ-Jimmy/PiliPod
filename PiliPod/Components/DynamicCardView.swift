@@ -26,7 +26,11 @@ struct DynamicCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             authorHeader
-            if !item.text.isEmpty { textContent }
+            if !item.text.isEmpty {
+                textContent
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("\(videoSourcePrefix).\(item.id).text")
+            }
             imageGrid
             if let video = item.video { videoPreview(video) }
             if let live = item.live { livePreview(live) }

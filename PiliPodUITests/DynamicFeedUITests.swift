@@ -88,10 +88,12 @@ final class DynamicFeedUITests: XCTestCase {
     func testTextDynamicZoomOpensDetail() {
         let app = launchFeed()
         let feed = app.descendants(matching: .any)["dynamicFeedScroll"]
-        let text = app.staticTexts["测试文字动态 · 刷新1"]
+        let text = app.descendants(matching: .any)["dynamicFeed.fixture2.text"]
         for _ in 0..<8 {
-            if text.isHittable { break }
-            feed.swipeUp()
+            if text.exists && text.isHittable { break }
+            let start = feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            let end = feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+            start.press(forDuration: 0.1, thenDragTo: end)
         }
         XCTAssertTrue(text.isHittable)
         let originalY = text.frame.minY
