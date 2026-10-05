@@ -55,5 +55,6 @@ git push origin codex/integration
 
 - 分支：`codex/dynamic-filters`，从已同步的 `origin/main`（`72ea3b6`）创建，无个人功能依赖。
 - 功能：原生 SwiftUI UP 主列表、关注搜索选择器、全部/投稿/番剧/专栏组合筛选；保留现有卡片导航。
-- PR：推送后创建个人 fork Draft PR，目标为 `codex/integration`；尚未整合。
-- 验证：`Verify dynamic filters` 编译应用并运行单元测试；结果以 GitHub Actions 为准，真实账号及真机交互尚未验证。
+- PR：[#12](https://github.com/NZJ-Jimmy/PiliPod/pull/12)，个人 fork Draft，目标为 `codex/integration`；尚未整合。
+- 验证：[`Verify dynamic filters`](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37266052575) 在代码提交 `3fce42c` 上编译成功，12 项单元测试全部通过（含 6 项新增筛选测试）。此后仅补充分支记录；真实账号及真机交互尚未验证。
+- 合并预检查：与整合分支存在 `BRANCHES.md` 新增记录及 `BiliAPI.fetchAllDynamics` 签名附近的冲突；准备组合测试时仅在整合分支解决，保留多账号请求行为。
