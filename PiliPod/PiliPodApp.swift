@@ -66,7 +66,9 @@ struct PiliPodApp: App {
     var body: some Scene {
         WindowGroup {
 #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--uitest-video-detail-gestures") {
+            if ConversationUITestFixture.enabled {
+                ConversationUITestHost()
+            } else if ProcessInfo.processInfo.arguments.contains("--uitest-video-detail-gestures") {
                 VideoDetailGestureTestRoot()
             } else if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
                 LibraryLayoutFixtureView()

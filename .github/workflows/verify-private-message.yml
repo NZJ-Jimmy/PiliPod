@@ -1,0 +1,101 @@
+name: Verify private messages and build test IPA
+
+on:
+  push:
+    branches: [codex/private-message-native]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-message-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.6'
+      - name: Select simulator
+        run: |
+          mkdir -p build
+          xcrun simctl list devices available -j > build/devices.json
+          python3 - <<'PY'
+          import json, os
+          devices = json.load(open('build/devices.json'))['devices']
+          candidates = [(runtime, d) for runtime, ds in devices.items() if 'iOS' in runtime for d in ds if 'iPhone' in d['name'] and d['isAvailable']]
+          runtime, device = sorted(candidates, key=lambda pair: pair[0], reverse=True)[0]
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('SIMULATOR_ID=' + device['udid'] + '\n')
+          print(runtime, device['name'])
+          PY
+      - name: Seed simulator photo library
+        run: |
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+          python3 - <<'PY'
+          import struct, zlib
+          def chunk(kind, data):
+              return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+          w, h = 240, 180
+          pixels = b''.join(b'\0' + bytes(v for x in range(w) for v in (x * 255 // w, y * 255 // h, 160)) for y in range(h))
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
+          open('build/sample-photo.png', 'wb').write(png)
+          PY
+          xcrun simctl addmedia "$SIMULATOR_ID" build/sample-photo.png
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project PiliPod.xcodeproj -scheme PiliPod \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -resultBundlePath build/PrivateMessageTests.xcresult \
+            -only-testing:PiliPodTests -only-testing:PiliPodUITests/ConversationUITests -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee build/test.log
+      - name: Export UI screenshots
+        if: always()
+        run: |
+          xcrun xcresulttool export attachments --path build/PrivateMessageTests.xcresult --output-path build/ui-screenshots || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Conversation-UI-screenshots
+          path: build/ui-screenshots
+      - name: Archive unsigned iOS app
+        run: |
+          set -o pipefail
+          xcodebuild archive -project PiliPod.xcodeproj -scheme PiliPod \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/PiliPod.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" PROVISIONING_PROFILE_SPECIFIER="" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            | tee build/archive.log
+      - name: Package test IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/PiliPod.xcarchive/Products/Applications/PiliPod.app build/Payload/
+          cd build
+          zip -qry PiliPod-private-message-test.ipa Payload
+          unzip -t PiliPod-private-message-test.ipa
+          shasum -a 256 PiliPod-private-message-test.ipa > PiliPod-private-message-test.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiliPod-private-message-test-IPA
+          path: |
+            build/PiliPod-private-message-test.ipa
+            build/PiliPod-private-message-test.sha256
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Private-message-test-results
+          path: |
+            build/*.log
+            build/PrivateMessageTests.xcresult
+            build/ui-screenshots
