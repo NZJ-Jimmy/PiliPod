@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class DynamicViewModel: ObservableObject {
     typealias PageLoader = (DynamicFeedFilter, String?) async throws -> UserSpaceDynamicPageResult
+    typealias AuthorLoader = () async throws -> [DynamicFeedAuthor]
 
     @Published var category: DynamicCategory = .all
     @Published var selectedAuthor: DynamicFeedAuthor?
@@ -16,18 +17,22 @@ final class DynamicViewModel: ObservableObject {
     var filter: DynamicFeedFilter { DynamicFeedFilter(category: category, authorMID: selectedAuthor?.mid) }
 
     private let loadPage: PageLoader
+    private let loadAuthors: AuthorLoader
     private var offset: String?
     private var requestID = UUID()
     private var loadedFilter: DynamicFeedFilter?
+    private var loadingFilter: DynamicFeedFilter?
+    private var hasLoadedAuthors = false
     private var authorRequestID = UUID()
 
-    init(loadPage: PageLoader? = nil) {
+    init(loadAuthors: AuthorLoader? = nil, loadPage: PageLoader? = nil) {
         self.loadPage = loadPage ?? { filter, offset in
             if let mid = filter.authorMID {
                 return try await BiliAPI.shared.fetchUserSpaceDynamics(mid: mid, offset: offset)
             }
             return try await BiliAPI.shared.fetchAllDynamics(offset: offset, category: filter.category)
         }
+        self.loadAuthors = loadAuthors ?? { try await BiliAPI.shared.fetchDynamicAuthors() }
     }
 
     func resetAccount() {
@@ -35,23 +40,30 @@ final class DynamicViewModel: ObservableObject {
         authorRequestID = UUID()
         selectedAuthor = nil
         authors = []
+        hasLoadedAuthors = false
         items = []
         offset = nil
         loadedFilter = nil
+        loadingFilter = nil
         errorMessage = nil
         hasMore = true
         isLoading = false
+    }
+
+    func loadAuthorsIfNeeded() async {
+        guard !hasLoadedAuthors else { return }
+        await refreshAuthors()
     }
 
     func refreshAuthors() async {
         let id = UUID()
         authorRequestID = id
         do {
-            let result = try await BiliAPI.shared.fetchDynamicAuthors()
+            let result = try await loadAuthors()
             guard authorRequestID == id, !Task.isCancelled else { return }
             authors = result
+            hasLoadedAuthors = true
         } catch {
-            // 推荐列表失败不阻断动态和“全部关注”选择器。
             guard authorRequestID == id else { return }
             if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
                 ErrorLogService.record(error, context: "加载动态 UP 主")
@@ -59,13 +71,24 @@ final class DynamicViewModel: ObservableObject {
         }
     }
 
+    // NavigationStack 返回或切换 tab 会重新执行 .task，同一筛选已有结果时保留列表和游标。
+    func loadIfNeeded() async {
+        guard loadedFilter != filter else { return }
+        guard !isLoading || loadingFilter != filter else { return }
+        await refresh()
+    }
+
     func refresh() async {
+        let requestedFilter = filter
         requestID = UUID()
-        loadedFilter = filter
-        items = []
-        offset = nil
-        hasMore = true
-        await loadBatch(id: requestID, filter: filter)
+        if loadedFilter != requestedFilter {
+            items = []
+            offset = nil
+            hasMore = true
+            loadedFilter = nil
+        }
+        // 同一筛选下保留旧卡片；仅请求成功后一次替换，避免移除刷新宿主而取消任务。
+        await loadBatch(id: requestID, filter: requestedFilter, replacing: true)
     }
 
     func loadMoreIfNeeded(current item: UserSpaceDynamicItem) async {
@@ -75,29 +98,49 @@ final class DynamicViewModel: ObservableObject {
 
     func loadMore() async {
         guard !isLoading, hasMore, loadedFilter == filter else { return }
-        await loadBatch(id: requestID, filter: filter)
+        await loadBatch(id: requestID, filter: filter, replacing: false)
     }
 
-    private func loadBatch(id: UUID, filter requestedFilter: DynamicFeedFilter) async {
+    private func loadBatch(id: UUID, filter requestedFilter: DynamicFeedFilter, replacing: Bool) async {
         isLoading = true
+        loadingFilter = requestedFilter
         errorMessage = nil
-        defer { if requestID == id { isLoading = false } }
+        defer {
+            if requestID == id {
+                isLoading = false
+                loadingFilter = nil
+            }
+        }
+
+        var nextOffset = replacing ? nil : offset
+        var nextHasMore = true
+        var added: [UserSpaceDynamicItem] = []
+        var seen = Set(replacing ? [] : items.map(\.id))
+        var visitedOffsets = Set<String>()
 
         do {
-            // 稀疏类别继续跨页查找，每批最多五页，仍有游标时提供“继续查找”。
-            for _ in 0..<5 {
-                let previousOffset = offset
+            // 自动跨过无匹配的页，直到有结果或服务端结束；导航和筛选切换仍可取消。
+            repeat {
+                try Task.checkCancellation()
+                let previousOffset = nextOffset
+                if let previousOffset { visitedOffsets.insert(previousOffset) }
                 let page = try await loadPage(requestedFilter, previousOffset)
-                guard requestID == id, filter == requestedFilter, !Task.isCancelled else { return }
-                var seen = Set(items.map(\.id))
-                let added = page.items.filter {
+                try Task.checkCancellation()
+                guard requestID == id, filter == requestedFilter else { return }
+                added.append(contentsOf: page.items.filter {
                     (requestedFilter.authorMID == nil || requestedFilter.category.matches($0)) && seen.insert($0.id).inserted
-                }
-                items.append(contentsOf: added)
-                offset = page.nextOffset
-                hasMore = page.hasMore && !(page.nextOffset ?? "").isEmpty && page.nextOffset != previousOffset
-                if !added.isEmpty || !hasMore { break }
-            }
+                })
+                nextOffset = page.nextOffset
+                nextHasMore = page.hasMore && !(nextOffset ?? "").isEmpty
+                    && !visitedOffsets.contains(nextOffset ?? "")
+            } while added.isEmpty && nextHasMore
+
+            // 游标与卡片原子提交，失败或取消不丢掉上一份完整结果。
+            if replacing { items = added }
+            else { items.append(contentsOf: added) }
+            offset = nextOffset
+            hasMore = nextHasMore
+            loadedFilter = requestedFilter
         } catch is CancellationError {
             return
         } catch let error as URLError where error.code == .cancelled {
@@ -106,7 +149,6 @@ final class DynamicViewModel: ObservableObject {
             guard requestID == id, filter == requestedFilter else { return }
             ErrorLogService.record(error, context: "加载筛选动态")
             errorMessage = error.localizedDescription
-            // 保留卡片和游标，分页失败后可重试同一页。
         }
     }
 }

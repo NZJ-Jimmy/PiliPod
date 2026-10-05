@@ -65,7 +65,15 @@ struct PiliPodApp: App {
 
     var body: some Scene {
         WindowGroup {
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-dynamic-feed-ui-testing") {
+                DynamicView(testViewModel: DynamicFeedUITestFixture.makeModel(), testAccountMID: 42)
+            } else {
+                MainTabView()
+            }
+#else
             MainTabView()
+#endif
         }
     }
 }

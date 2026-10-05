@@ -59,3 +59,4 @@ git push origin codex/integration
 - 验证：[`Verify dynamic filters`](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37266052575) 在代码提交 `3fce42c` 上编译成功，12 项单元测试全部通过（含 6 项新增筛选测试）。此后仅补充分支记录；真实账号及真机交互尚未验证。
 - 合并预检查：与整合分支存在 `BRANCHES.md` 新增记录及 `BiliAPI.fetchAllDynamics` 签名附近的冲突；准备组合测试时仅在整合分支解决，保留多账号请求行为。
 - 2026-10-05：按用户要求直接在功能分支构建独立未签名测试 IPA，不做整合；流水线增加 Release 归档、IPA 校验及产物上传。构建提交 `5892e3b` 已通过 12 项单元测试与 Release 归档；[构建记录](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37290170025)，[IPA 产物](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37290170025/artifacts/11336486867)。本地下载后 SHA-256、Payload 结构及 arm64 可执行文件校验通过，真机尚未验证。
+- 2026-10-05 后续修复：刷新原子替换结果、自动跨页查找；刷新控件仅挂在纵向列表；返回时复用筛选结果与滚动位置；视频卡片及动态详情接入原生 zoom 转场。新增取消刷新/页面返回/跨页单元测试和三项固定数据 UI 回归测试，独立 IPA 验证待完成。

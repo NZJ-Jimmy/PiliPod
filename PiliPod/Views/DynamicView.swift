@@ -5,10 +5,23 @@ struct DynamicView: View {
     @ObservedObject private var session = LoginSession.shared
     @State private var showingAuthorPicker = false
     @State private var selectedVideo: VideoItem?
+    @State private var selectedVideoSourceID = ""
+    @State private var feedScrollPosition = ScrollPosition(edge: .top)
     @State private var selectedLiveRoom: LiveCardModel?
     @State private var selectedAuthorMID: Int?
     @State private var selectedDynamic: UserSpaceDynamicItem?
     @Namespace private var videoHeroNamespace
+
+#if DEBUG
+    private var testAccountMID: Int?
+
+    init(testViewModel: DynamicViewModel, testAccountMID: Int) {
+        _viewModel = StateObject(wrappedValue: testViewModel)
+        self.testAccountMID = testAccountMID
+    }
+#endif
+
+    init() {}
 
     var body: some View {
         NavigationStack {
@@ -20,22 +33,25 @@ struct DynamicView: View {
                         .padding(.vertical, 12)
                 }
                 .id(requestKey)
+                .scrollPosition($feedScrollPosition)
+                .accessibilityIdentifier("dynamicFeedScroll")
+                .refreshable {
+                    guard accountMID != nil else { return }
+                    await viewModel.refresh()
+                    await viewModel.refreshAuthors()
+                }
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("动态")
-            .refreshable {
-                guard accountMID != nil else { return }
-                await viewModel.refresh()
-                await viewModel.refreshAuthors()
-            }
             .task(id: requestKey) {
                 guard accountMID != nil else { return }
-                await viewModel.refresh()
+                await viewModel.loadIfNeeded()
             }
             .task(id: accountMID) {
                 guard accountMID != nil else { return }
-                await viewModel.refreshAuthors()
+                await viewModel.loadAuthorsIfNeeded()
             }
+            .onChange(of: requestKey) { _, _ in feedScrollPosition = ScrollPosition(edge: .top) }
             .onChange(of: accountMID) { _, _ in
                 showingAuthorPicker = false
                 viewModel.resetAccount()
@@ -51,8 +67,10 @@ struct DynamicView: View {
                 VideoDetailPage(
                     video: video,
                     namespace: videoHeroNamespace,
-                    onBack: { selectedVideo = nil }
+                    onBack: { withAnimation { selectedVideo = nil } }
                 )
+                .navigationTransition(.zoom(sourceID: selectedVideoSourceID, in: videoHeroNamespace))
+                .accessibilityIdentifier("dynamicVideoDetail")
             }
             .navigationDestination(item: $selectedLiveRoom) { room in
                 LivePlaybackPage(room: room)
@@ -63,15 +81,22 @@ struct DynamicView: View {
             .navigationDestination(item: $selectedDynamic) { dynamic in
                 UserSpaceDynamicDetailView(
                     item: dynamic,
-                    onVideoTap: openVideo,
+                    onVideoTap: { video in
+                        selectedVideoSourceID = DynamicCardView.videoSourceID(prefix: "dynamicDetail", itemID: dynamic.id, bvid: video.bvid ?? "")
+                        openVideo(video)
+                    },
                     onLiveTap: openLive,
-                    onAuthorTap: { selectedAuthorMID = $0 }
+                    onAuthorTap: { selectedAuthorMID = $0 },
+                    videoNamespace: videoHeroNamespace
                 )
             }
         }
     }
 
     private var accountMID: Int? {
+#if DEBUG
+        if let testAccountMID { return testAccountMID }
+#endif
         guard session.isLogin else { return nil }
         return session.cookies.flatMap { Int($0.DedeUserID) }
     }
@@ -115,6 +140,8 @@ struct DynamicView: View {
                 .padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+            .accessibilityIdentifier("dynamicAuthorStrip")
 
             Picker("内容类别", selection: $viewModel.category) {
                 ForEach(DynamicCategory.allCases) { category in
@@ -177,12 +204,12 @@ struct DynamicView: View {
         } else if viewModel.items.isEmpty {
             VStack(spacing: 12) {
                 ContentUnavailableView(
-                    viewModel.hasMore ? "尚未找到匹配动态" : "暂无匹配动态",
+                    "暂无匹配动态",
                     systemImage: "tray",
-                    description: Text(viewModel.hasMore ? "可以继续查找更早的动态。" : "试试其他 UP 主或内容类别。")
+                    description: Text("试试其他 UP 主或内容类别。")
                 )
                 if viewModel.hasMore {
-                    Button("继续查找") { Task { await viewModel.loadMore() } }
+                    Button("重新加载") { Task { await viewModel.refresh() } }
                         .buttonStyle(.bordered)
                 }
             }
@@ -191,12 +218,17 @@ struct DynamicView: View {
                 ForEach(viewModel.items) { item in
                     DynamicCardView(
                         item: item,
-                        onVideoTap: openVideo,
+                        onVideoTap: { video in
+                            selectedVideoSourceID = DynamicCardView.videoSourceID(prefix: "dynamicFeed", itemID: item.id, bvid: video.bvid ?? "")
+                            openVideo(video)
+                        },
                         onLiveTap: openLive,
                         onAuthorTap: { selectedAuthorMID = $0 },
                         onCommentTap: { _ in selectedDynamic = item },
-                        onTapDetail: { selectedDynamic = item }
+                        onTapDetail: { selectedDynamic = item },
+                        videoNamespace: videoHeroNamespace
                     )
+                    .id(item.id)
                     .onAppear { Task { await viewModel.loadMoreIfNeeded(current: item) } }
                 }
                 if viewModel.isLoading {

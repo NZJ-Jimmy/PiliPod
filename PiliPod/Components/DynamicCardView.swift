@@ -9,6 +9,12 @@ struct DynamicCardView: View {
     let onCommentTap: (UserSpaceDynamicItem.CommentTarget) -> Void
     var showsFullTextByDefault = false
     var onTapDetail: (() -> Void)? = nil
+    var videoNamespace: Namespace.ID? = nil
+    var videoSourcePrefix = "dynamicFeed"
+
+    static func videoSourceID(prefix: String, itemID: String, bvid: String) -> String {
+        "\(prefix).\(itemID).\(bvid)"
+    }
 
     @Environment(\.openURL) private var openURL
     @State private var showsFullText = false
@@ -156,6 +162,11 @@ struct DynamicCardView: View {
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
         }
         .buttonStyle(.plain)
+        .modifier(DynamicVideoTransitionSource(
+            namespace: videoNamespace,
+            sourceID: Self.videoSourceID(prefix: videoSourcePrefix, itemID: item.id, bvid: video.bvid ?? "")
+        ))
+        .accessibilityIdentifier(Self.videoSourceID(prefix: videoSourcePrefix, itemID: item.id, bvid: video.bvid ?? ""))
     }
 
     private func livePreview(_ live: UserSpaceDynamicItem.Live) -> some View {
@@ -412,4 +423,18 @@ private struct SafariView: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+}
+
+private struct DynamicVideoTransitionSource: ViewModifier {
+    let namespace: Namespace.ID?
+    let sourceID: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let namespace {
+            content.matchedTransitionSource(id: sourceID, in: namespace)
+        } else {
+            content
+        }
+    }
 }
