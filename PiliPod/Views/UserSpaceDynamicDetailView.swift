@@ -5,7 +5,6 @@ struct UserSpaceDynamicDetailView: View {
     let onVideoTap: (UserSpaceDynamicItem.Video) -> Void
     let onLiveTap: (UserSpaceDynamicItem.Live) -> Void
     let onAuthorTap: (Int) -> Void
-    var videoNamespace: Namespace.ID? = nil
 
     private var commentOID: Int64? {
         let value = item.commentTarget.resourceID ?? item.commentTarget.commentID
@@ -26,7 +25,6 @@ struct UserSpaceDynamicDetailView: View {
                     onAuthorTap: onAuthorTap,
                     onCommentTap: { _ in },
                     showsFullTextByDefault: true,
-                    videoNamespace: videoNamespace,
                     videoSourcePrefix: "dynamicDetail"
                 )
 

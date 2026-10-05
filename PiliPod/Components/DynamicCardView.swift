@@ -9,7 +9,6 @@ struct DynamicCardView: View {
     let onCommentTap: (UserSpaceDynamicItem.CommentTarget) -> Void
     var showsFullTextByDefault = false
     var onTapDetail: (() -> Void)? = nil
-    var videoNamespace: Namespace.ID? = nil
     var videoSourcePrefix = "dynamicFeed"
 
     static func videoSourceID(prefix: String, itemID: String, bvid: String) -> String {
@@ -162,10 +161,6 @@ struct DynamicCardView: View {
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
         }
         .buttonStyle(.plain)
-        .modifier(DynamicVideoTransitionSource(
-            namespace: videoNamespace,
-            sourceID: Self.videoSourceID(prefix: videoSourcePrefix, itemID: item.id, bvid: video.bvid ?? "")
-        ))
         .accessibilityIdentifier(Self.videoSourceID(prefix: videoSourcePrefix, itemID: item.id, bvid: video.bvid ?? ""))
     }
 
@@ -425,16 +420,3 @@ private struct SafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }
 
-private struct DynamicVideoTransitionSource: ViewModifier {
-    let namespace: Namespace.ID?
-    let sourceID: String
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if let namespace {
-            content.matchedTransitionSource(id: sourceID, in: namespace)
-        } else {
-            content
-        }
-    }
-}

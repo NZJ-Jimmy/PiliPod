@@ -5,7 +5,6 @@ struct DynamicView: View {
     @ObservedObject private var session = LoginSession.shared
     @State private var showingAuthorPicker = false
     @State private var selectedVideo: VideoItem?
-    @State private var selectedVideoSourceID = ""
     @State private var selectedLiveRoom: LiveCardModel?
     @State private var selectedAuthorMID: Int?
     @State private var selectedDynamic: UserSpaceDynamicItem?
@@ -69,7 +68,7 @@ struct DynamicView: View {
                     namespace: videoHeroNamespace,
                     onBack: { withAnimation { selectedVideo = nil } }
                 )
-                .navigationTransition(.zoom(sourceID: selectedVideoSourceID, in: videoHeroNamespace))
+                .navigationTransition(.automatic)
                 .accessibilityIdentifier("dynamicVideoDetail")
             }
             .navigationDestination(item: $selectedLiveRoom) { room in
@@ -81,13 +80,9 @@ struct DynamicView: View {
             .navigationDestination(item: $selectedDynamic) { dynamic in
                 UserSpaceDynamicDetailView(
                     item: dynamic,
-                    onVideoTap: { video in
-                        selectedVideoSourceID = DynamicCardView.videoSourceID(prefix: "dynamicDetail", itemID: dynamic.id, bvid: video.bvid ?? "")
-                        openVideo(video)
-                    },
+                    onVideoTap: openVideo,
                     onLiveTap: openLive,
-                    onAuthorTap: { selectedAuthorMID = $0 },
-                    videoNamespace: videoHeroNamespace
+                    onAuthorTap: { selectedAuthorMID = $0 }
                 )
             }
         }
@@ -218,15 +213,11 @@ struct DynamicView: View {
                 ForEach(viewModel.items) { item in
                     DynamicCardView(
                         item: item,
-                        onVideoTap: { video in
-                            selectedVideoSourceID = DynamicCardView.videoSourceID(prefix: "dynamicFeed", itemID: item.id, bvid: video.bvid ?? "")
-                            openVideo(video)
-                        },
+                        onVideoTap: openVideo,
                         onLiveTap: openLive,
                         onAuthorTap: { selectedAuthorMID = $0 },
                         onCommentTap: { _ in selectedDynamic = item },
-                        onTapDetail: { selectedDynamic = item },
-                        videoNamespace: videoHeroNamespace
+                        onTapDetail: { selectedDynamic = item }
                     )
                     .id(item.id)
                     .onAppear { Task { await viewModel.loadMoreIfNeeded(current: item) } }

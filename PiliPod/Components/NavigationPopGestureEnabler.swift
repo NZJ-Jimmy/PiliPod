@@ -18,9 +18,11 @@ struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
         private weak var installedNavigationController: UINavigationController?
         private var originalDelegate: UIGestureRecognizerDelegate?
         private var delegateProxy: PopGestureDelegateProxy?
+        private var remainingInstallAttempts = 3
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
+            remainingInstallAttempts = 3
             enableSystemPopGestureIfPossible()
         }
 
@@ -33,6 +35,8 @@ struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
             guard let navigationController = containingNavigationController(),
                   let gesture = navigationController.interactivePopGestureRecognizer
             else {
+                guard remainingInstallAttempts > 0 else { return }
+                remainingInstallAttempts -= 1
                 DispatchQueue.main.async { [weak self] in
                     self?.installIfPossibleOnNextRunLoop()
                 }
@@ -51,6 +55,11 @@ struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
                 gesture.delegate = proxy
             }
             gesture.isEnabled = true
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-dynamic-feed-ui-testing") {
+                print("DynamicNav installed: stack=\(navigationController.viewControllers.count), gesture=\(type(of: gesture)), enabled=\(gesture.isEnabled)")
+            }
+#endif
         }
 
         private func installIfPossibleOnNextRunLoop() {
@@ -58,12 +67,23 @@ struct NavigationPopGestureEnabler: UIViewControllerRepresentable {
         }
 
         private func containingNavigationController() -> UINavigationController? {
+            if let navigationController { return navigationController }
             var controller: UIViewController? = self
             while let current = controller {
                 if let navigationController = current.navigationController {
                     return navigationController
                 }
                 controller = current.parent
+            }
+            // SwiftUI can host the representable in a separate controller;
+            // its displayed view still belongs to the navigation responder chain.
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let navigation = current as? UINavigationController { return navigation }
+                if let controller = current as? UIViewController, let navigation = controller.navigationController {
+                    return navigation
+                }
+                responder = current.next
             }
             return nil
         }
@@ -94,6 +114,11 @@ private final class PopGestureDelegateProxy: NSObject, UIGestureRecognizerDelega
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-dynamic-feed-ui-testing") {
+            print("DynamicNav begin: stack=\(navigationController?.viewControllers.count ?? 0), transitioning=\(navigationController?.transitionCoordinator != nil)")
+        }
+#endif
         guard let navigationController,
               navigationController.viewControllers.count > 1,
               navigationController.transitionCoordinator == nil,
