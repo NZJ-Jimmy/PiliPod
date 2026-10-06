@@ -215,12 +215,12 @@ struct DynamicView: View {
         } else if viewModel.items.isEmpty {
             VStack(spacing: 12) {
                 ContentUnavailableView(
-                    "暂无匹配动态",
+                    viewModel.hasMore ? "近期暂无匹配动态" : "暂无匹配动态",
                     systemImage: "tray",
-                    description: Text("试试其他 UP 主或内容类别。")
+                    description: Text(viewModel.hasMore ? "可以查看更早动态，或切换筛选条件。" : "试试其他 UP 主或内容类别。")
                 )
                 if viewModel.hasMore {
-                    Button("重新加载") { Task { await viewModel.refresh() } }
+                    Button("查看更早动态") { Task { await viewModel.loadMore() } }
                         .buttonStyle(.bordered)
                 }
             }

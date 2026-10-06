@@ -106,6 +106,17 @@ final class DynamicFeedUITests: XCTestCase {
     }
 
     @MainActor
+    func testSelectedAuthorArticleShowsOnlyArticles() {
+        let app = launchFeed()
+        app.scrollViews["dynamicAuthorStrip"].buttons["测试 UP"].tap()
+        app.segmentedControls.buttons["专栏"].tap()
+        XCTAssertTrue(app.buttons["dynamicFeed.fixture1.preview"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["dynamicFeed.fixture0.BV1zz411zzzz"].exists)
+        XCTAssertFalse(app.buttons["查看更早动态"].exists)
+        attach(app, name: "Author article server-filtered feed")
+    }
+
+    @MainActor
     private func attach(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name

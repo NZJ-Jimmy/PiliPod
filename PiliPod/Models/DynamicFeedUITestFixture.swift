@@ -7,7 +7,7 @@ enum DynamicFeedUITestFixture {
         var refreshCount = 0
         return DynamicViewModel(loadAuthors: {
             [DynamicFeedAuthor(mid: 42, uname: "测试 UP", face: nil, hasUpdate: true)]
-        }, loadPage: { _, _ in
+        }, loadPage: { filter, _ in
             refreshCount += 1
             let count = refreshCount
             try await Task.sleep(for: .milliseconds(300))
@@ -41,7 +41,8 @@ enum DynamicFeedUITestFixture {
                 guard let item = UserSpaceDynamicItem.make(from: raw) else { throw URLError(.cannotParseResponse) }
                 return item
             }
-            return UserSpaceDynamicPageResult(items: items, hasMore: false, nextOffset: nil)
+            let returnedItems = filter.needsLocalCategoryFilter ? items : items.filter { filter.category.matches($0) }
+            return UserSpaceDynamicPageResult(items: returnedItems, hasMore: false, nextOffset: nil)
         })
     }
 }

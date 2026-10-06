@@ -17,7 +17,7 @@ enum DynamicCategory: String, CaseIterable, Identifiable {
         }
     }
 
-    // 空间动态接口不支持类别参数，按顶层类型筛选，避免将转发中的视频算作投稿。
+    // 无已验证的 UP + 投稿/番剧组合接口时，按顶层类型筛选，避免将转发算作投稿。
     func matches(_ item: UserSpaceDynamicItem) -> Bool {
         switch self {
         case .all: return true
@@ -31,6 +31,32 @@ enum DynamicCategory: String, CaseIterable, Identifiable {
 struct DynamicFeedFilter: Hashable {
     var category: DynamicCategory = .all
     var authorMID: Int?
+
+    var needsLocalCategoryFilter: Bool {
+        authorMID != nil && (category == .video || category == .pgc)
+    }
+
+    var automaticPageLimit: Int { needsLocalCategoryFilter ? 2 : 1 }
+
+    func requestURL(offset: String? = nil) -> URL {
+        let isAuthorArticle = authorMID != nil && category == .article
+        let path = isAuthorArticle ? "opus/feed/space" : "feed/all"
+        var components = URLComponents(string: "https://api.bilibili.com/x/polymer/web-dynamic/v1/\(path)")!
+        var query = [URLQueryItem(name: "platform", value: "web"),
+                     URLQueryItem(name: "web_location", value: isAuthorArticle ? "333.1387" : "333.1365")]
+        if let authorMID {
+            query.append(URLQueryItem(name: "host_mid", value: String(authorMID)))
+            if isAuthorArticle { query.append(URLQueryItem(name: "type", value: "article")) }
+        } else {
+            query.append(URLQueryItem(name: "type", value: category.apiType))
+        }
+        if let offset, !offset.isEmpty { query.append(URLQueryItem(name: "offset", value: offset)) }
+        if !isAuthorArticle {
+            query.append(URLQueryItem(name: "features", value: "itemOpusStyle,listOnlyfans,opusBigCover,onlyfansVote,forwardListHidden,decorationCard,commentsNewVersion,onlyfansAssetsV2,ugcDelete,onlyfansQaCard"))
+        }
+        components.queryItems = query
+        return components.url!
+    }
 }
 
 struct DynamicFeedAuthor: Decodable, Identifiable, Hashable {

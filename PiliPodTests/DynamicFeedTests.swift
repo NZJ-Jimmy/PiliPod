@@ -33,20 +33,106 @@ struct DynamicFeedTests {
         #expect(!model.hasMore)
     }
 
-    @Test func sparseFeedAutomaticallyContinuesBeyondFivePages() async throws {
+    @Test func sparseFeedStopsAfterTwoPagesAndResumesFromCursorManually() async throws {
         let text = try item("text", type: "DYNAMIC_TYPE_WORD")
         let video = try item("video")
         var calls = 0
-        let model = DynamicViewModel { _, _ in
+        var offsets: [String?] = []
+        let model = DynamicViewModel { _, offset in
             calls += 1
+            offsets.append(offset)
             return UserSpaceDynamicPageResult(items: calls == 7 ? [video] : [text], hasMore: calls < 7, nextOffset: String(calls))
         }
         model.selectedAuthor = DynamicFeedAuthor(mid: 42, uname: "测试 UP", face: nil, hasUpdate: nil)
         model.category = .video
         await model.refresh()
+        #expect(calls == 2)
+        #expect(model.items.isEmpty)
+        #expect(model.hasMore)
+        #expect(model.needsManualContinuation)
+        await model.loadIfNeeded()
+        #expect(calls == 2)
+        await model.loadMore()
+        #expect(calls == 4)
+        #expect(offsets[2] == "2")
+        await model.loadMore()
+        #expect(calls == 6)
+        await model.loadMore()
         #expect(calls == 7)
+        #expect(offsets[6] == "6")
         #expect(model.items.map(\.id) == ["video"])
         #expect(!model.hasMore)
+        #expect(!model.needsManualContinuation)
+    }
+
+    @Test func filteredArticlePageDoesNotScanHistory() async throws {
+        var calls = 0
+        let model = DynamicViewModel { filter, _ in
+            #expect(!filter.needsLocalCategoryFilter)
+            calls += 1
+            return UserSpaceDynamicPageResult(items: [], hasMore: true, nextOffset: "next")
+        }
+        model.selectedAuthor = DynamicFeedAuthor(mid: 42, uname: "测试 UP", face: nil, hasUpdate: nil)
+        model.category = .article
+        await model.refresh()
+        #expect(calls == 1)
+        #expect(model.needsManualContinuation)
+    }
+
+    @Test func requestRoutesKeepServerFiltersAndAvoidUnverifiedCombinations() throws {
+        func query(_ filter: DynamicFeedFilter) throws -> [String: String] {
+            let components = try #require(URLComponents(url: filter.requestURL(offset: "next cursor"), resolvingAgainstBaseURL: false))
+            return Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        }
+        let article = DynamicFeedFilter(category: .article, authorMID: 42)
+        #expect(article.requestURL().path.hasSuffix("/opus/feed/space"))
+        #expect(try query(article)["type"] == "article")
+        #expect(try query(article)["host_mid"] == "42")
+        #expect(try query(article)["offset"] == "next cursor")
+        for category in DynamicCategory.allCases {
+            let allAuthors = DynamicFeedFilter(category: category)
+            #expect(try query(allAuthors)["type"] == category.apiType)
+            #expect(try query(allAuthors)["host_mid"] == nil)
+        }
+        let video = DynamicFeedFilter(category: .video, authorMID: 42)
+        #expect(video.requestURL().path.hasSuffix("/feed/all"))
+        #expect(try query(video)["host_mid"] == "42")
+        #expect(try query(video)["type"] == nil)
+        #expect(video.needsLocalCategoryFilter)
+    }
+
+    @Test func opusArticleSummaryUsesSelectedAuthorWithoutDetailRequests() throws {
+        let raw = try JSONDecoder().decode(SpaceDynamicJSONValue.self, from: Data("""
+        {"opus_id":"1234567890123456789","content":"专栏标题","jump_url":"//www.bilibili.com/opus/1234567890123456789",
+        "author":null,"cover":{"url":"//i0.hdslb.com/article.jpg"},"stat":{"like":"5"},"pub_time":""}
+        """.utf8))
+        let author = DynamicFeedAuthor(mid: 42, uname: "测试 UP", face: "https://i0.hdslb.com/face.jpg", hasUpdate: nil)
+        let article = try #require(UserSpaceDynamicItem.makeArticle(from: raw, author: author, mid: 42))
+        #expect(article.id == "1234567890123456789")
+        #expect(article.author.name == "测试 UP")
+        #expect(article.author.mid == 42)
+        #expect(article.previewCard?.link == "https://www.bilibili.com/opus/1234567890123456789")
+        #expect(article.previewCard?.title == "专栏标题")
+        #expect(article.statistics.like == 5)
+        #expect(article.commentTarget.resourceID == nil)
+    }
+
+    @Test func riskControlFailureStopsAutomaticRetryAndRetainsExistingFeed() async throws {
+        let first = try item("first")
+        var calls = 0
+        let model = DynamicViewModel { _, _ in
+            calls += 1
+            if calls > 1 { throw APIError.businessError(code: -352, message: "-352") }
+            return UserSpaceDynamicPageResult(items: [first], hasMore: true, nextOffset: "next")
+        }
+        await model.refresh()
+        await model.loadMore()
+        #expect(model.items.map(\.id) == ["first"])
+        #expect(model.errorMessage?.contains("风控") == true)
+        await model.loadMoreIfNeeded(current: first)
+        await model.loadIfNeeded()
+        #expect(calls == 2)
+        #expect(APIError.responseError(412).localizedDescription.contains("HTTP 412"))
     }
 
     @Test func returningToLoadedFilterKeepsItemsAndPaginationCursor() async throws {

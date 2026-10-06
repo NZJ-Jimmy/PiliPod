@@ -13,25 +13,22 @@ final class DynamicViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var hasMore = true
+    @Published private(set) var needsManualContinuation = false
 
     var filter: DynamicFeedFilter { DynamicFeedFilter(category: category, authorMID: selectedAuthor?.mid) }
 
-    private let loadPage: PageLoader
+    private let loadPage: PageLoader?
     private let loadAuthors: AuthorLoader
     private var offset: String?
     private var requestID = UUID()
     private var loadedFilter: DynamicFeedFilter?
     private var loadingFilter: DynamicFeedFilter?
+    private var failedFilter: DynamicFeedFilter?
     private var hasLoadedAuthors = false
     private var authorRequestID = UUID()
 
     init(loadAuthors: AuthorLoader? = nil, loadPage: PageLoader? = nil) {
-        self.loadPage = loadPage ?? { filter, offset in
-            if let mid = filter.authorMID {
-                return try await BiliAPI.shared.fetchUserSpaceDynamics(mid: mid, offset: offset)
-            }
-            return try await BiliAPI.shared.fetchAllDynamics(offset: offset, category: filter.category)
-        }
+        self.loadPage = loadPage
         self.loadAuthors = loadAuthors ?? { try await BiliAPI.shared.fetchDynamicAuthors() }
     }
 
@@ -45,8 +42,10 @@ final class DynamicViewModel: ObservableObject {
         offset = nil
         loadedFilter = nil
         loadingFilter = nil
+        failedFilter = nil
         errorMessage = nil
         hasMore = true
+        needsManualContinuation = false
         isLoading = false
     }
 
@@ -73,6 +72,7 @@ final class DynamicViewModel: ObservableObject {
 
     // NavigationStack 返回或切换 tab 会重新执行 .task，同一筛选已有结果时保留列表和游标。
     func loadIfNeeded() async {
+        guard failedFilter != filter else { return }
         guard loadedFilter != filter else { return }
         guard !isLoading || loadingFilter != filter else { return }
         await refresh()
@@ -85,6 +85,7 @@ final class DynamicViewModel: ObservableObject {
             items = []
             offset = nil
             hasMore = true
+            needsManualContinuation = false
             loadedFilter = nil
         }
         // 同一筛选下保留旧卡片；仅请求成功后一次替换，避免移除刷新宿主而取消任务。
@@ -92,7 +93,7 @@ final class DynamicViewModel: ObservableObject {
     }
 
     func loadMoreIfNeeded(current item: UserSpaceDynamicItem) async {
-        guard item.id == items.last?.id else { return }
+        guard item.id == items.last?.id, !needsManualContinuation, errorMessage == nil else { return }
         await loadMore()
     }
 
@@ -105,6 +106,7 @@ final class DynamicViewModel: ObservableObject {
         isLoading = true
         loadingFilter = requestedFilter
         errorMessage = nil
+        failedFilter = nil
         defer {
             if requestID == id {
                 isLoading = false
@@ -117,29 +119,41 @@ final class DynamicViewModel: ObservableObject {
         var added: [UserSpaceDynamicItem] = []
         var seen = Set(replacing ? [] : items.map(\.id))
         var visitedOffsets = Set<String>()
+        var pagesLoaded = 0
+        let requestedAuthor = selectedAuthor
 
         do {
-            // 自动跨过无匹配的页，直到有结果或服务端结束；导航和筛选切换仍可取消。
+            // 服务端筛选只取一页；本地组合筛选每次最多两页，不扫描全部历史。
             repeat {
                 try Task.checkCancellation()
                 let previousOffset = nextOffset
                 if let previousOffset { visitedOffsets.insert(previousOffset) }
-                let page = try await loadPage(requestedFilter, previousOffset)
+                let page: UserSpaceDynamicPageResult
+                if let loadPage {
+                    page = try await loadPage(requestedFilter, previousOffset)
+                } else {
+                    page = try await BiliAPI.shared.fetchFilteredDynamics(filter: requestedFilter, author: requestedAuthor, offset: previousOffset)
+                }
+                pagesLoaded += 1
                 try Task.checkCancellation()
                 guard requestID == id, filter == requestedFilter else { return }
                 added.append(contentsOf: page.items.filter {
-                    (requestedFilter.authorMID == nil || requestedFilter.category.matches($0)) && seen.insert($0.id).inserted
+                    (!requestedFilter.needsLocalCategoryFilter || requestedFilter.category.matches($0)) && seen.insert($0.id).inserted
                 })
                 nextOffset = page.nextOffset
                 nextHasMore = page.hasMore && !(nextOffset ?? "").isEmpty
                     && !visitedOffsets.contains(nextOffset ?? "")
-            } while added.isEmpty && nextHasMore
+                if added.isEmpty && nextHasMore && pagesLoaded < requestedFilter.automaticPageLimit {
+                    try await Task.sleep(for: .milliseconds(750))
+                }
+            } while added.isEmpty && nextHasMore && pagesLoaded < requestedFilter.automaticPageLimit
 
             // 游标与卡片原子提交，失败或取消不丢掉上一份完整结果。
             if replacing { items = added }
             else { items.append(contentsOf: added) }
             offset = nextOffset
             hasMore = nextHasMore
+            needsManualContinuation = added.isEmpty && nextHasMore
             loadedFilter = requestedFilter
         } catch is CancellationError {
             return
@@ -148,6 +162,7 @@ final class DynamicViewModel: ObservableObject {
         } catch {
             guard requestID == id, filter == requestedFilter else { return }
             ErrorLogService.record(error, context: "加载筛选动态")
+            failedFilter = requestedFilter
             errorMessage = error.localizedDescription
         }
     }
