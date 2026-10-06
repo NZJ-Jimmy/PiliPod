@@ -248,7 +248,7 @@ final class ConversationUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
             let bounds = panel.frame.intersection(app.frame)
             let widths = app.images.matching(identifier: "PXGGridLayout-Info").allElementsBoundByIndex
-                .filter { $0.frame.intersects(bounds) && $0.frame.width > 0 }.map { $0.frame.width }
+                .map(\.frame).filter { $0.intersects(bounds) && $0.width > 0 }.map(\.width)
             return !widths.isEmpty && widths.allSatisfy {
                 $0 > bounds.width * 0.28 && $0 < bounds.width * 0.36
             }

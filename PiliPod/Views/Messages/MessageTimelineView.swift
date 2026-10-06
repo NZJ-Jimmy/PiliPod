@@ -4,7 +4,6 @@ private struct ConversationScrollSnapshot: Equatable {
     let height: CGFloat
     let contentHeight: CGFloat
     let offset: CGFloat
-    let atBottom: Bool
 }
 
 struct MessageTimelineView: View {
@@ -18,6 +17,7 @@ struct MessageTimelineView: View {
     let onVideo: (VideoItem) -> Void
     @State private var followsLatest = true
     @State private var isUserScrolling = false
+    @State private var bottomIsVisible = false
     @State private var dragBoundary: CGFloat?
     @State private var position = ScrollPosition(idType: String.self)
     @State private var snapshot: ConversationScrollSnapshot?
@@ -60,6 +60,8 @@ struct MessageTimelineView: View {
                         onImage: onImage, onVideo: onVideo)
                         .id(row.id)
                 }
+                Color.clear.frame(height: 1)
+                    .onScrollVisibilityChange(threshold: 1) { bottomIsVisible = $0 }
             }
             .scrollTargetLayout()
             .padding(.horizontal, 12).padding(.vertical, 12)
@@ -71,34 +73,38 @@ struct MessageTimelineView: View {
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
         .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(followsLatest ? .bottom : nil, for: .sizeChanges)
-        .onScrollPhaseChange { _, phase, context in
+        .onScrollPhaseChange { _, phase in
             let wasUserScrolling = isUserScrolling
             isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
+            if phase == .interacting { followsLatest = false }
             if isUserScrolling && model.isLoadingHistory { historyAnchor = nil }
-            // LazyVStack refines its content height while scrolling. Reconcile at rest
-            // using the final geometry, rather than leaving a stale history-reading state.
-            if phase == .idle, wasUserScrolling, historyAnchor == nil, dragBoundary == nil,
-               isAtBottom(context.geometry) {
-                followsLatest = true
-                // Replace the user's absolute scroll position with a bottom edge
-                // position so subsequent keyboard/panel size changes can follow it.
-                scrollToLatest(animated: false)
+            if phase == .idle, wasUserScrolling {
+                Task { @MainActor in
+                    // Let the end marker's visibility settle after deceleration.
+                    await Task.yield()
+                    guard !isUserScrolling, historyAnchor == nil, dragBoundary == nil else { return }
+                    followsLatest = bottomIsVisible
+                    if followsLatest { scrollToLatest(animated: false) }
+                }
             }
         }
         .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
             ConversationScrollSnapshot(height: geometry.containerSize.height,
                 contentHeight: geometry.contentSize.height,
-                offset: geometry.contentOffset.y + geometry.contentInsets.top,
-                atBottom: isAtBottom(geometry))
+                offset: geometry.contentOffset.y + geometry.contentInsets.top)
         } action: { old, new in
             snapshot = new
-            if isUserScrolling && old.height == new.height && historyAnchor == nil && dragBoundary == nil {
-                followsLatest = new.atBottom
-            }
-            if followsLatest, historyAnchor == nil, dragBoundary == nil,
+            if followsLatest, !isUserScrolling, historyAnchor == nil, dragBoundary == nil,
                old.contentHeight != new.contentHeight {
                 scrollToLatest(animated: false)
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
+            if followsLatest, !isUserScrolling, dragBoundary == nil {
+                Task { @MainActor in
+                    await Task.yield()
+                    if followsLatest, !isUserScrolling, dragBoundary == nil { scrollToLatest(animated: false) }
+                }
             }
         }
         .onChange(of: model.scrollRequest) { _, request in
@@ -120,11 +126,6 @@ struct MessageTimelineView: View {
         withAnimation(animated && !reduceMotion ? .smooth(duration: 0.22) : nil) {
             position.scrollTo(edge: .bottom)
         }
-    }
-
-    private func isAtBottom(_ geometry: ScrollGeometry) -> Bool {
-        geometry.contentOffset.y + geometry.containerSize.height >=
-            geometry.contentSize.height + geometry.contentInsets.bottom - 24
     }
 
     @MainActor private func loadHistory() async {
