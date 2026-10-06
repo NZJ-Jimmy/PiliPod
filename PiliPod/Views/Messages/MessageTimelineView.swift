@@ -99,6 +99,14 @@ struct MessageTimelineView: View {
                 scrollToLatest(animated: false)
             }
         }
+        .onChange(of: bottomIsVisible) { _, visible in
+            // Visibility can arrive a frame after the idle scroll phase.
+            if visible, !isUserScrolling, !model.isLoadingHistory,
+               historyAnchor == nil, dragBoundary == nil {
+                followsLatest = true
+                scrollToLatest(animated: false)
+            }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
             if followsLatest, !isUserScrolling, dragBoundary == nil {
                 Task { @MainActor in
