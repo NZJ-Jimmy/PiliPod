@@ -72,6 +72,10 @@ struct MessageTimelineView: View {
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
+        #if DEBUG
+        .accessibilityValue(ConversationUITestFixture.enabled
+            ? "following=\(followsLatest); bottomVisible=\(bottomIsVisible); userScrolling=\(isUserScrolling)" : "")
+        #endif
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .onScrollPhaseChange { _, phase in
             let wasUserScrolling = isUserScrolling
