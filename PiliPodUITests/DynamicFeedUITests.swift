@@ -56,13 +56,13 @@ final class DynamicFeedUITests: XCTestCase {
         XCTAssertTrue(video.isHittable)
         let originalY = video.frame.minY
         video.tap()
-        let hidden = NSPredicate(format: "hittable == false")
-        expectation(for: hidden, evaluatedWith: video)
-        waitForExpectations(timeout: 10)
+        let detail = app.descendants(matching: .any)["dynamicVideoDetail"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 10))
         app.pinch(withScale: 0.4, velocity: -1)
-        let returned = NSPredicate(format: "hittable == true")
-        expectation(for: returned, evaluatedWith: video)
+        let returned = NSPredicate(format: "exists == false")
+        expectation(for: returned, evaluatedWith: detail)
         waitForExpectations(timeout: 10)
+        XCTAssertTrue(video.isHittable)
         XCTAssertTrue(video.label.contains("刷新1"))
         XCTAssertEqual(video.frame.minY, originalY, accuracy: 8)
         attach(app, name: "Interactive return retains scroll position")

@@ -73,6 +73,7 @@ struct DynamicView: View {
                     usesNativeZoomTransition: true,
                     onBack: { withAnimation { selectedVideo = nil } }
                 )
+                .accessibilityIdentifier("dynamicVideoDetail")
                 .navigationTransition(.zoom(sourceID: videoSourceID, in: videoHeroNamespace))
                 .accessibilityIdentifier("dynamicVideoDetail")
             }
