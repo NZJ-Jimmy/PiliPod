@@ -81,6 +81,9 @@ struct MessageTimelineView: View {
             if phase == .idle, wasUserScrolling, historyAnchor == nil, dragBoundary == nil,
                isAtBottom(context.geometry) {
                 followsLatest = true
+                // Replace the user's absolute scroll position with a bottom edge
+                // position so subsequent keyboard/panel size changes can follow it.
+                scrollToLatest(animated: false)
             }
         }
         .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
