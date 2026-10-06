@@ -19,6 +19,12 @@ struct ConversationPhotoPicker: UIViewControllerRepresentable {
         controller.rootView = picker
     }
 
+    static func dismantleUIViewController(_ controller: UIHostingController<AnyView>, coordinator: Void) {
+        // Detach the out-of-process picker before SwiftUI removes its hosting
+        // controller, including when switching input panels or leaving the chat.
+        controller.rootView = AnyView(EmptyView())
+    }
+
     private var picker: AnyView {
         AnyView(
             PhotosPicker(selection: $selection, maxSelectionCount: 50,
