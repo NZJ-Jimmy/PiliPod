@@ -2,7 +2,7 @@ import XCTest
 
 final class ConversationUITests: XCTestCase {
     @MainActor
-    func testReturningToBottomRestoresKeyboardAndPanelFollowing() throws {
+    func testBottomFollowingAfterReturningFromHistory() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-conversation"]
         app.launch()
@@ -16,8 +16,11 @@ final class ConversationUITests: XCTestCase {
         input.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         XCTAssertFalse(latest.isHittable, "Opening the keyboard while reading history must not jump to latest")
-        // Swiping dismisses the keyboard interactively. Reach the actual bottom,
-        // including the padding below the latest bubble, before reopening it.
+        // A downward drag dismisses the keyboard interactively; an upward
+        // scroll toward latest does not. Verify a real keyboard reopen below.
+        messages.swipeDown()
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
+            evaluatedWith: app.keyboards.firstMatch)], timeout: 5), .completed)
         for _ in 0..<8 { messages.swipeUp() }
         input.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))

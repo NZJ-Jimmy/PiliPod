@@ -6,6 +6,13 @@ private struct ConversationScrollSnapshot: Equatable {
     let offset: CGFloat
 }
 
+private struct ConversationBottomPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = nextValue() ?? value
+    }
+}
+
 struct MessageTimelineView: View {
     @ObservedObject var model: ConversationViewModel
     @Binding var inputPanel: ConversationInputPanel?
@@ -17,7 +24,7 @@ struct MessageTimelineView: View {
     let onVideo: (VideoItem) -> Void
     @State private var followsLatest = true
     @State private var isUserScrolling = false
-    @State private var bottomIsVisible = false
+    @State private var bottomY: CGFloat?
     @State private var dragBoundary: CGFloat?
     @State private var position = ScrollPosition(idType: String.self)
     @State private var snapshot: ConversationScrollSnapshot?
@@ -59,9 +66,15 @@ struct MessageTimelineView: View {
                     MessageRow(row: row, emotionURLs: model.emotionURLs, heroNamespace: heroNamespace,
                         onImage: onImage, onVideo: onVideo)
                         .id(row.id)
+                        .background {
+                            if row.id == model.rows.last?.id {
+                                GeometryReader { geometry in
+                                    Color.clear.preference(key: ConversationBottomPreferenceKey.self,
+                                        value: geometry.frame(in: .named("message.timeline")).maxY)
+                                }
+                            }
+                        }
                 }
-                Color.clear.frame(height: 1)
-                    .onScrollVisibilityChange(threshold: 1) { bottomIsVisible = $0 }
             }
             .scrollTargetLayout()
             .padding(.horizontal, 12).padding(.vertical, 12)
@@ -69,6 +82,10 @@ struct MessageTimelineView: View {
         .scrollPosition($position)
         .coordinateSpace(name: "message.timeline")
         .onPreferenceChange(MessageFramePreferenceKey.self) { visibleFrames = $0 }
+        .onPreferenceChange(ConversationBottomPreferenceKey.self) {
+            bottomY = $0
+            restoreFollowingIfAtBottom()
+        }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
@@ -84,7 +101,7 @@ struct MessageTimelineView: View {
             if isUserScrolling && model.isLoadingHistory { historyAnchor = nil }
             if phase == .idle, wasUserScrolling {
                 Task { @MainActor in
-                    // Let the end marker's visibility settle after deceleration.
+                    // Let the final message's frame settle after deceleration.
                     await Task.yield()
                     guard !isUserScrolling, historyAnchor == nil, dragBoundary == nil else { return }
                     followsLatest = bottomIsVisible
@@ -100,14 +117,6 @@ struct MessageTimelineView: View {
             snapshot = new
             if followsLatest, !isUserScrolling, historyAnchor == nil, dragBoundary == nil,
                old.contentHeight != new.contentHeight {
-                scrollToLatest(animated: false)
-            }
-        }
-        .onChange(of: bottomIsVisible) { _, visible in
-            // Visibility can arrive a frame after the idle scroll phase.
-            if visible, !followsLatest, !isUserScrolling, !model.isLoadingHistory,
-               historyAnchor == nil, dragBoundary == nil {
-                followsLatest = true
                 scrollToLatest(animated: false)
             }
         }
@@ -138,6 +147,18 @@ struct MessageTimelineView: View {
         withAnimation(animated && !reduceMotion ? .smooth(duration: 0.22) : nil) {
             position.scrollTo(edge: .bottom)
         }
+    }
+
+    private var bottomIsVisible: Bool {
+        guard let bottomY, let height = snapshot?.height else { return false }
+        return bottomY > 0 && bottomY <= height + 1
+    }
+
+    private func restoreFollowingIfAtBottom() {
+        guard !followsLatest, bottomIsVisible, !isUserScrolling, !model.isLoadingHistory,
+              historyAnchor == nil, dragBoundary == nil else { return }
+        followsLatest = true
+        scrollToLatest(animated: false)
     }
 
     @MainActor private func loadHistory() async {

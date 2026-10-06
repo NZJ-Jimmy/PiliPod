@@ -52,6 +52,6 @@ git push origin codex/integration
 需要移除某个已整合功能时，从明确的基线新建一条整合分支，仅合入要保留的功能；保留旧分支作为历史记录，避免覆盖共享测试历史。
 ## 原生私信增量修复（2026-10-07）
 
-`codex/private-message-native` 继续维护原生 SwiftUI 方案。原 PR #10 已合入 `codex/integration`；本次通过新的增量 Draft PR 提交，不复用已合并的 PR，也不把整合分支反向合回功能分支。
+`codex/private-message-native` 继续维护原生 SwiftUI 方案。原 PR #10 已合入 `codex/integration`；本次通过增量 Draft PR [#13](https://github.com/NZJ-Jimmy/PiliPod/pull/13) 提交，不复用已合并的 PR，也不把整合分支反向合回功能分支。
 
 本次修复照片面板收起/展开时的网格列数切换，以及查看历史再回到底部后键盘/面板不再抬起消息的问题。新增三列网格和底部跟随的界面回归验证。验证状态以当前功能分支 Actions 和增量 PR 为准；未声称已通过测试或完成真机验证。
