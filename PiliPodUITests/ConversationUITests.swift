@@ -98,6 +98,8 @@ final class ConversationUITests: XCTestCase {
         let input = app.descendants(matching: .any)["conversation.input"].firstMatch
         input.tap()
         input.typeText("Send from history")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "value == %@", "Send from history"),
+            evaluatedWith: input)], timeout: 5), .completed)
         app.buttons["conversation.send"].tap()
         let sent = app.staticTexts["Send from history"]
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: sent)], timeout: 10), .completed)

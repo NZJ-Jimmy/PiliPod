@@ -71,14 +71,16 @@ struct MessageTimelineView: View {
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
         .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(followsLatest ? .bottom : nil, for: .sizeChanges)
         .onScrollPhaseChange { _, phase, context in
             let wasUserScrolling = isUserScrolling
             isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
             if isUserScrolling && model.isLoadingHistory { historyAnchor = nil }
             // LazyVStack refines its content height while scrolling. Reconcile at rest
             // using the final geometry, rather than leaving a stale history-reading state.
-            if phase == .idle, wasUserScrolling, historyAnchor == nil, dragBoundary == nil {
-                followsLatest = isAtBottom(context.geometry)
+            if phase == .idle, wasUserScrolling, historyAnchor == nil, dragBoundary == nil,
+               isAtBottom(context.geometry) {
+                followsLatest = true
             }
         }
         .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
@@ -94,14 +96,6 @@ struct MessageTimelineView: View {
             if followsLatest, historyAnchor == nil, dragBoundary == nil,
                old.contentHeight != new.contentHeight {
                 scrollToLatest(animated: false)
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
-            if followsLatest, dragBoundary == nil {
-                Task { @MainActor in
-                    await Task.yield()
-                    if followsLatest, dragBoundary == nil { scrollToLatest(animated: false) }
-                }
             }
         }
         .onChange(of: model.scrollRequest) { _, request in
