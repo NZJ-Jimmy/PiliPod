@@ -98,6 +98,7 @@ struct MessageTimelineView: View {
             if phase == .idle, wasUserScrolling {
                 if historyAnchor == nil, dragBoundary == nil {
                     followsLatest = bottomIsVisible
+                    if followsLatest { scrollToLatest(animated: false) }
                 }
             }
         }
@@ -138,6 +139,9 @@ struct MessageTimelineView: View {
         guard !followsLatest, bottomIsVisible, !isUserScrolling, !model.isLoadingHistory,
               historyAnchor == nil, dragBoundary == nil else { return }
         followsLatest = true
+        // Rebind the position after a user scroll. Size anchors alone preserve
+        // the user's free offset when switching keyboard and panel safe areas.
+        scrollToLatest(animated: false)
     }
 
     @MainActor private func loadHistory() async {

@@ -16,11 +16,19 @@ final class ConversationUITests: XCTestCase {
         input.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         XCTAssertFalse(latest.isHittable, "Opening the keyboard while reading history must not jump to latest")
-        // A downward drag dismisses the keyboard interactively; an upward
-        // scroll toward latest does not. Verify a real keyboard reopen below.
-        messages.swipeDown()
+        // Close the keyboard through the existing input-panel controls, then
+        // return to bottom with no input surface visible before reopening it.
+        app.buttons["选择表情"].tap()
+        let historyPanel = app.otherElements["conversation.panel"].firstMatch
+        XCTAssertTrue(historyPanel.waitForExistence(timeout: 5))
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
             evaluatedWith: app.keyboards.firstMatch)], timeout: 5), .completed)
+        XCTAssertFalse(latest.isHittable, "Opening a panel while reading history must not jump to latest")
+        let historyHandle = historyPanel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        historyHandle.press(forDuration: 0.1,
+            thenDragTo: historyHandle.withOffset(CGVector(dx: 0, dy: 260)))
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
+            evaluatedWith: historyPanel)], timeout: 5), .completed)
         for _ in 0..<8 { messages.swipeUp() }
         input.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
