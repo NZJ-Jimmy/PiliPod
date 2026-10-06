@@ -2,6 +2,40 @@ import XCTest
 
 final class ConversationUITests: XCTestCase {
     @MainActor
+    func testReturningToBottomRestoresKeyboardAndPanelFollowing() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-conversation"]
+        app.launch()
+        let messages = app.scrollViews["conversation.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 15))
+        let latest = app.staticTexts["多行输入和面板布局测试"]
+        for _ in 0..<4 { messages.swipeDown() }
+        XCTAssertFalse(latest.isHittable, "The test must first leave the bottom")
+
+        let input = app.descendants(matching: .any)["conversation.input"].firstMatch
+        input.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(latest.isHittable, "Opening the keyboard while reading history must not jump to latest")
+        // Swiping dismisses the keyboard interactively. Reach the actual bottom,
+        // including the padding below the latest bubble, before reopening it.
+        for _ in 0..<8 { messages.swipeUp() }
+        input.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        assertLatestVisible(latest, in: messages)
+        capture(app, "conversation-bottom-again-keyboard")
+
+        app.buttons["选择表情"].tap()
+        let panel = app.otherElements["conversation.panel"].firstMatch
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        assertLatestVisible(latest, in: messages)
+        capture(app, "conversation-bottom-again-panel")
+        let handle = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        handle.press(forDuration: 0.1, thenDragTo: handle.withOffset(CGVector(dx: 0, dy: -180)))
+        assertLatestVisible(latest, in: messages)
+        capture(app, "conversation-bottom-again-expanded-panel")
+    }
+
+    @MainActor
     func testSendDuringHistoryLoadKeepsLatestVisible() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-conversation", "--uitest-slow-history"]
@@ -154,7 +188,19 @@ final class ConversationUITests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
                 evaluatedWith: onboarding)], timeout: 5), .completed)
         }
+        assertThreePhotoColumns(in: app, panel: panel)
         capture(app, "conversation-photos-before-selection")
+        let photoCollapsedHeight = panel.frame.height
+        let photoHandle = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        photoHandle.press(forDuration: 0.1, thenDragTo: photoHandle.withOffset(CGVector(dx: 0, dy: -180)))
+        XCTAssertGreaterThan(panel.frame.height, photoCollapsedHeight + 60)
+        assertThreePhotoColumns(in: app, panel: panel)
+        capture(app, "conversation-photos-expanded-three-columns")
+        let expandedPhotoHandle = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        expandedPhotoHandle.press(forDuration: 0.1,
+            thenDragTo: expandedPhotoHandle.withOffset(CGVector(dx: 0, dy: 180)))
+        XCTAssertLessThan(abs(panel.frame.height - photoCollapsedHeight), 4)
+        assertThreePhotoColumns(in: app, panel: panel)
         // Native grid image accessibility nodes have no hittable point; tap their actual on-screen center.
         // A remote picker can retain accessibility nodes for scrolled-off thumbnails.
         // Choose a center inside both the panel and the app instead of its first node.
@@ -187,5 +233,24 @@ final class ConversationUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor private func assertLatestVisible(_ latest: XCUIElement, in messages: XCUIElement) {
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
+            latest.isHittable && latest.frame.maxY <= messages.frame.maxY + 1
+        }, evaluatedWith: latest)], timeout: 5), .completed,
+            "Returning to bottom must restore following through keyboard and panel resizing")
+    }
+
+    @MainActor private func assertThreePhotoColumns(in app: XCUIApplication, panel: XCUIElement) {
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
+            let bounds = panel.frame.intersection(app.frame)
+            let widths = app.images.matching(identifier: "PXGGridLayout-Info").allElementsBoundByIndex
+                .filter { $0.frame.intersects(bounds) && $0.frame.width > 0 }.map { $0.frame.width }
+            return !widths.isEmpty && widths.allSatisfy {
+                $0 > bounds.width * 0.28 && $0 < bounds.width * 0.36
+            }
+        }, evaluatedWith: panel)], timeout: 10), .completed,
+            "Collapsed and expanded native photo grids must both use three columns")
     }
 }

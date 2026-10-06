@@ -71,19 +71,24 @@ struct MessageTimelineView: View {
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
         .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .onScrollPhaseChange { _, phase in
+        .onScrollPhaseChange { _, phase, context in
+            let wasUserScrolling = isUserScrolling
             isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
             if isUserScrolling && model.isLoadingHistory { historyAnchor = nil }
+            // LazyVStack refines its content height while scrolling. Reconcile at rest
+            // using the final geometry, rather than leaving a stale history-reading state.
+            if phase == .idle, wasUserScrolling, historyAnchor == nil, dragBoundary == nil {
+                followsLatest = isAtBottom(context.geometry)
+            }
         }
         .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
             ConversationScrollSnapshot(height: geometry.containerSize.height,
                 contentHeight: geometry.contentSize.height,
                 offset: geometry.contentOffset.y + geometry.contentInsets.top,
-                atBottom: geometry.contentOffset.y + geometry.containerSize.height >=
-                    geometry.contentSize.height + geometry.contentInsets.bottom - 24)
+                atBottom: isAtBottom(geometry))
         } action: { old, new in
             snapshot = new
-            if isUserScrolling && old.height == new.height && old.contentHeight == new.contentHeight && historyAnchor == nil {
+            if isUserScrolling && old.height == new.height && historyAnchor == nil && dragBoundary == nil {
                 followsLatest = new.atBottom
             }
             if followsLatest, historyAnchor == nil, dragBoundary == nil,
@@ -118,6 +123,11 @@ struct MessageTimelineView: View {
         withAnimation(animated && !reduceMotion ? .smooth(duration: 0.22) : nil) {
             position.scrollTo(edge: .bottom)
         }
+    }
+
+    private func isAtBottom(_ geometry: ScrollGeometry) -> Bool {
+        geometry.contentOffset.y + geometry.containerSize.height >=
+            geometry.contentSize.height + geometry.contentInsets.bottom - 24
     }
 
     @MainActor private func loadHistory() async {
