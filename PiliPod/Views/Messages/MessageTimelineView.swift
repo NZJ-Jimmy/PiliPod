@@ -2,7 +2,6 @@ import SwiftUI
 
 private struct ConversationScrollSnapshot: Equatable {
     let height: CGFloat
-    let contentHeight: CGFloat
     let offset: CGFloat
 }
 
@@ -89,44 +88,25 @@ struct MessageTimelineView: View {
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .accessibilityIdentifier("conversation.messages")
-        #if DEBUG
-        .accessibilityValue(ConversationUITestFixture.enabled
-            ? "following=\(followsLatest); bottomVisible=\(bottomIsVisible); userScrolling=\(isUserScrolling)" : "")
-        #endif
         .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(followsLatest ? .bottom : nil, for: .sizeChanges)
         .onScrollPhaseChange { _, phase in
             let wasUserScrolling = isUserScrolling
             isUserScrolling = phase == .tracking || phase == .interacting || phase == .decelerating
             if phase == .interacting { followsLatest = false }
             if isUserScrolling && model.isLoadingHistory { historyAnchor = nil }
             if phase == .idle, wasUserScrolling {
-                Task { @MainActor in
-                    // Let the final message's frame settle after deceleration.
-                    await Task.yield()
-                    guard !isUserScrolling, historyAnchor == nil, dragBoundary == nil else { return }
+                if historyAnchor == nil, dragBoundary == nil {
                     followsLatest = bottomIsVisible
-                    if followsLatest { scrollToLatest(animated: false) }
                 }
             }
         }
         .onScrollGeometryChange(for: ConversationScrollSnapshot.self) { geometry in
             ConversationScrollSnapshot(height: geometry.containerSize.height,
-                contentHeight: geometry.contentSize.height,
                 offset: geometry.contentOffset.y + geometry.contentInsets.top)
-        } action: { old, new in
+        } action: { _, new in
             snapshot = new
-            if followsLatest, !isUserScrolling, historyAnchor == nil, dragBoundary == nil,
-               old.contentHeight != new.contentHeight {
-                scrollToLatest(animated: false)
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
-            if followsLatest, !isUserScrolling, dragBoundary == nil {
-                Task { @MainActor in
-                    await Task.yield()
-                    if followsLatest, !isUserScrolling, dragBoundary == nil { scrollToLatest(animated: false) }
-                }
-            }
+            restoreFollowingIfAtBottom()
         }
         .onChange(of: model.scrollRequest) { _, request in
             guard request != nil else { return }
@@ -158,7 +138,6 @@ struct MessageTimelineView: View {
         guard !followsLatest, bottomIsVisible, !isUserScrolling, !model.isLoadingHistory,
               historyAnchor == nil, dragBoundary == nil else { return }
         followsLatest = true
-        scrollToLatest(animated: false)
     }
 
     @MainActor private func loadHistory() async {

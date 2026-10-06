@@ -245,7 +245,7 @@ final class ConversationUITests: XCTestCase {
             latest.isHittable && latest.frame.maxY <= messages.frame.maxY + 1
         }, evaluatedWith: latest)], timeout: 5)
         XCTAssertEqual(result, .completed,
-            "Returning to bottom must restore following through keyboard and panel resizing. \(messages.value ?? "")")
+            "Returning to bottom must restore following through keyboard and panel resizing")
     }
 
     @MainActor private func assertThreePhotoColumns(in app: XCUIApplication, panel: XCUIElement) {
