@@ -119,34 +119,27 @@ final class DynamicViewModel: ObservableObject {
         var added: [UserSpaceDynamicItem] = []
         var seen = Set(replacing ? [] : items.map(\.id))
         var visitedOffsets = Set<String>()
-        var pagesLoaded = 0
         let requestedAuthor = selectedAuthor
 
         do {
-            // 服务端筛选只取一页；本地组合筛选每次最多两页，不扫描全部历史。
-            repeat {
-                try Task.checkCancellation()
-                let previousOffset = nextOffset
-                if let previousOffset { visitedOffsets.insert(previousOffset) }
-                let page: UserSpaceDynamicPageResult
-                if let loadPage {
-                    page = try await loadPage(requestedFilter, previousOffset)
-                } else {
-                    page = try await BiliAPI.shared.fetchFilteredDynamics(filter: requestedFilter, author: requestedAuthor, offset: previousOffset)
-                }
-                pagesLoaded += 1
-                try Task.checkCancellation()
-                guard requestID == id, filter == requestedFilter else { return }
-                added.append(contentsOf: page.items.filter {
-                    (!requestedFilter.needsLocalCategoryFilter || requestedFilter.category.matches($0)) && seen.insert($0.id).inserted
-                })
-                nextOffset = page.nextOffset
-                nextHasMore = page.hasMore && !(nextOffset ?? "").isEmpty
-                    && !visitedOffsets.contains(nextOffset ?? "")
-                if added.isEmpty && nextHasMore && pagesLoaded < requestedFilter.automaticPageLimit {
-                    try await Task.sleep(for: .milliseconds(750))
-                }
-            } while added.isEmpty && nextHasMore && pagesLoaded < requestedFilter.automaticPageLimit
+            // 作者和类别均由 API 筛选，每次只请求一页，空页保留游标供手动继续。
+            try Task.checkCancellation()
+            let previousOffset = nextOffset
+            if let previousOffset { visitedOffsets.insert(previousOffset) }
+            let page: UserSpaceDynamicPageResult
+            if let loadPage {
+                page = try await loadPage(requestedFilter, previousOffset)
+            } else {
+                page = try await BiliAPI.shared.fetchFilteredDynamics(filter: requestedFilter, author: requestedAuthor, offset: previousOffset)
+            }
+            try Task.checkCancellation()
+            guard requestID == id, filter == requestedFilter else { return }
+            added.append(contentsOf: page.items.filter {
+                seen.insert($0.id).inserted
+            })
+            nextOffset = page.nextOffset
+            nextHasMore = page.hasMore && !(nextOffset ?? "").isEmpty
+                && !visitedOffsets.contains(nextOffset ?? "")
 
             // 游标与卡片原子提交，失败或取消不丢掉上一份完整结果。
             if replacing { items = added }

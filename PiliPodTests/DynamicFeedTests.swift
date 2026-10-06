@@ -11,64 +11,57 @@ struct DynamicFeedTests {
         return try #require(UserSpaceDynamicItem.make(from: raw))
     }
 
-    @Test func authorAndCategoryContinuePastNonMatchingPages() async throws {
-        let text = try item("text", type: "DYNAMIC_TYPE_WORD")
+    @Test func authorAndCategoryLoadsOneServerFilteredPage() async throws {
         let video = try item("video")
-        var offsets: [String?] = []
+        var calls = 0
         let model = DynamicViewModel { filter, offset in
             #expect(filter.authorMID == 42)
             #expect(filter.category == .video)
-            offsets.append(offset)
-            return offset == nil
-                ? UserSpaceDynamicPageResult(items: [text], hasMore: true, nextOffset: "page2")
-                : UserSpaceDynamicPageResult(items: [video, video], hasMore: false, nextOffset: nil)
+            #expect(offset == nil)
+            calls += 1
+            return UserSpaceDynamicPageResult(items: [video, video], hasMore: false, nextOffset: nil)
         }
         model.selectedAuthor = DynamicFeedAuthor(mid: 42, uname: "测试 UP", face: nil, hasUpdate: nil)
         model.category = .video
         await model.refresh()
-        #expect(offsets.count == 2)
-        #expect(offsets[0] == nil)
-        #expect(offsets[1] == "page2")
+        #expect(calls == 1)
         #expect(model.items.map(\.id) == ["video"])
         #expect(!model.hasMore)
     }
 
-    @Test func sparseFeedStopsAfterTwoPagesAndResumesFromCursorManually() async throws {
-        let text = try item("text", type: "DYNAMIC_TYPE_WORD")
+    @Test func emptyFilteredPageStopsAndResumesFromCursorManually() async throws {
         let video = try item("video")
         var calls = 0
         var offsets: [String?] = []
         let model = DynamicViewModel { _, offset in
             calls += 1
             offsets.append(offset)
-            return UserSpaceDynamicPageResult(items: calls == 7 ? [video] : [text], hasMore: calls < 7, nextOffset: String(calls))
+            return UserSpaceDynamicPageResult(items: calls == 3 ? [video] : [], hasMore: calls < 3, nextOffset: String(calls))
         }
         model.selectedAuthor = DynamicFeedAuthor(mid: 42, uname: "测试 UP", face: nil, hasUpdate: nil)
         model.category = .video
         await model.refresh()
-        #expect(calls == 2)
+        #expect(calls == 1)
         #expect(model.items.isEmpty)
         #expect(model.hasMore)
         #expect(model.needsManualContinuation)
         await model.loadIfNeeded()
+        #expect(calls == 1)
+        await model.loadMore()
         #expect(calls == 2)
+        #expect(offsets[1] == "1")
+        #expect(model.needsManualContinuation)
         await model.loadMore()
-        #expect(calls == 4)
+        #expect(calls == 3)
         #expect(offsets[2] == "2")
-        await model.loadMore()
-        #expect(calls == 6)
-        await model.loadMore()
-        #expect(calls == 7)
-        #expect(offsets[6] == "6")
         #expect(model.items.map(\.id) == ["video"])
         #expect(!model.hasMore)
         #expect(!model.needsManualContinuation)
     }
-
     @Test func filteredArticlePageDoesNotScanHistory() async throws {
         var calls = 0
         let model = DynamicViewModel { filter, _ in
-            #expect(!filter.needsLocalCategoryFilter)
+            #expect(filter.category == .article)
             calls += 1
             return UserSpaceDynamicPageResult(items: [], hasMore: true, nextOffset: "next")
         }
@@ -79,7 +72,7 @@ struct DynamicFeedTests {
         #expect(model.needsManualContinuation)
     }
 
-    @Test func requestRoutesKeepServerFiltersAndAvoidUnverifiedCombinations() throws {
+    @Test func requestRoutesSendBothServerFilters() throws {
         func query(_ filter: DynamicFeedFilter) throws -> [String: String] {
             let components = try #require(URLComponents(url: filter.requestURL(offset: "next cursor"), resolvingAgainstBaseURL: false))
             return Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
@@ -97,8 +90,10 @@ struct DynamicFeedTests {
         let video = DynamicFeedFilter(category: .video, authorMID: 42)
         #expect(video.requestURL().path.hasSuffix("/feed/all"))
         #expect(try query(video)["host_mid"] == "42")
-        #expect(try query(video)["type"] == nil)
-        #expect(video.needsLocalCategoryFilter)
+        #expect(try query(video)["type"] == "video")
+        let pgc = DynamicFeedFilter(category: .pgc, authorMID: 42)
+        #expect(try query(pgc)["host_mid"] == "42")
+        #expect(try query(pgc)["type"] == "pgc")
     }
 
     @Test func opusArticleSummaryUsesSelectedAuthorWithoutDetailRequests() throws {

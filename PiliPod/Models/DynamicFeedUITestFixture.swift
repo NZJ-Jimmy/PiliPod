@@ -41,7 +41,7 @@ enum DynamicFeedUITestFixture {
                 guard let item = UserSpaceDynamicItem.make(from: raw) else { throw URLError(.cannotParseResponse) }
                 return item
             }
-            let returnedItems = filter.needsLocalCategoryFilter ? items : items.filter { filter.category.matches($0) }
+            let returnedItems = items.filter { filter.category.matches($0) }
             return UserSpaceDynamicPageResult(items: returnedItems, hasMore: false, nextOffset: nil)
         })
     }
