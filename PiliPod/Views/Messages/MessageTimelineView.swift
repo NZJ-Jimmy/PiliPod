@@ -101,7 +101,7 @@ struct MessageTimelineView: View {
         }
         .onChange(of: bottomIsVisible) { _, visible in
             // Visibility can arrive a frame after the idle scroll phase.
-            if visible, !isUserScrolling, !model.isLoadingHistory,
+            if visible, !followsLatest, !isUserScrolling, !model.isLoadingHistory,
                historyAnchor == nil, dragBoundary == nil {
                 followsLatest = true
                 scrollToLatest(animated: false)
