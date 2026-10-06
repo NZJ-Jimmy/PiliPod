@@ -228,7 +228,10 @@ final class ConversationUITests: XCTestCase {
         let thumbnail = try XCTUnwrap(visiblePhoto, "A visible native photo thumbnail is required")
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: thumbnail.frame.midX, dy: thumbnail.frame.midY)).tap()
-        XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 15), "Selecting a photo must immediately add it to the composer")
+        // Thumbnail selection is immediate, but the remote picker imports the
+        // full asset asynchronously and can take over 15 seconds on a cold CI simulator.
+        XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 30),
+            "Selecting a photo must add it to the composer when import completes")
         XCTAssertTrue(panel.exists, "Continuous selection must keep the picker open")
         XCTAssertGreaterThanOrEqual(app.buttons["移除图片"].frame.width, 44)
         XCTAssertFalse(app.buttons["添加 1 张"].exists)
