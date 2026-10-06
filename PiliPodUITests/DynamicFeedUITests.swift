@@ -17,7 +17,11 @@ final class DynamicFeedUITests: XCTestCase {
         let app = launchFeed()
         let first = app.buttons["dynamicFeed.fixture0.BV1zz411zzzz"]
         XCTAssertTrue(first.label.contains("刷新1"))
-        app.descendants(matching: .any)["dynamicFeedScroll"].swipeDown()
+        let feed = app.descendants(matching: .any)["dynamicFeedScroll"]
+        let start = feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        let end = feed.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+        start.press(forDuration: 0.1, thenDragTo: end)
+        defer { attach(app, name: "Pull-to-refresh result") }
         let refreshed = NSPredicate(format: "label CONTAINS %@", "刷新2")
         expectation(for: refreshed, evaluatedWith: first)
         waitForExpectations(timeout: 15)
