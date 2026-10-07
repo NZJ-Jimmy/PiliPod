@@ -8,56 +8,95 @@
 import SwiftUI
 
 struct MyView: View {
+    var isActive = true
     @StateObject private var viewModel = MyViewModel()
     @ObservedObject private var loginSession = LoginSession.shared
     @State private var showLoginSheet = false
     @State private var showHistory = false
     @State private var showWatchLater = false
     @State private var showOfflineCache = false
+    @State private var showSubscriptions = false
+    @State private var showFavorites = false
     @State private var followingRoute: MyFollowingRoute?
+    @ObservedObject private var pageSettings = MyPageSettingsStore.shared
+    @State private var expandedSections: Set<MyPageSection> = []
+    @State private var appliedDefaults = false
+    @State private var selectedPreviewVideo: VideoItem?
+    @State private var selectedPreviewFolder: LibraryFolder?
+    @State private var selectedPreviewSource = ""
+    @Namespace private var previewNamespace
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // 顶部按钮
-                HStack {
-                    Spacer()
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gear")
-                            .frame(width: 20, height: 20)
-                            .padding(10)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // 顶部按钮
+                    HStack {
+                        NavigationLink { AccountSettingsView() } label: {
+                            Label(loginSession.incognito ? "无痕模式" : "账号", systemImage: loginSession.incognito ? "eye.slash" : "person.2")
+                        }
+                        Spacer()
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "gear")
+                                .frame(width: 20, height: 20)
+                                .padding(10)
+                        }
+                        .tint(.primary)
+                        .accessibilityIdentifier("my.settings")
+                        .glassEffect(.regular.interactive(), in: .circle)
                     }
-                    .tint(.primary)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .padding(.horizontal, 30)
+                    .padding(.top, 10)
+
+                    headerView
+                        .padding(.horizontal, 30)
+
+                    VStack(spacing: 0) {
+                        ForEach(pageSettings.settings.normalized.order) { section in
+                            librarySection(section)
+                            if section != pageSettings.settings.normalized.order.last {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    Spacer()
                 }
-                .padding(.horizontal, 30)
-                .padding(.top, 10)
-
-                headerView
-                    .padding(.horizontal, 30)
-
-                quickActionRow
-                    .padding(.horizontal, 30)
-
-                Spacer()
             }
-            .task {
+            .task(id: loginSession.selectedID(for: .main)) {
+                viewModel.user = nil
                 await viewModel.loadUser()
+            }
+            .onAppear {
+                if !appliedDefaults {
+                    expandedSections = pageSettings.settings.expanded
+                    appliedDefaults = true
+                }
+            }
+            .onChange(of: pageSettings.settings.expanded) { _, defaults in
+                expandedSections = defaults
+            }
+            .onChange(of: isActive) { _, active in
+                if active { expandedSections = pageSettings.settings.expanded }
+            }
+            .onChange(of: loginSession.cookieString) { _, _ in
+                selectedPreviewVideo = nil
+                selectedPreviewFolder = nil
+            }
+            .navigationDestination(item: $selectedPreviewVideo) { video in
+                VideoDetailPage(video: video, namespace: previewNamespace, onBack: { selectedPreviewVideo = nil })
+                    .navigationTransition(.zoom(sourceID: selectedPreviewSource, in: previewNamespace))
+            }
+            .navigationDestination(item: $selectedPreviewFolder) { folder in
+                LibraryMediaView(folder: folder)
+                    .navigationTransition(.zoom(sourceID: selectedPreviewSource, in: previewNamespace))
             }
             .fullScreenCover(isPresented: $showLoginSheet) {
                 LoginPageView()
             }
-            .onReceive(loginSession.$isLogin) { isLogin in
-                if isLogin {
-                    Task {
-                        await viewModel.loadUser()
-                    }
-                } else {
-                    viewModel.user = nil
-                }
-            }
+
             .navigationDestination(isPresented: $showHistory) {
                 HistoryView()
             }
@@ -65,7 +104,13 @@ struct MyView: View {
                 OfflineCacheView(initialPrefill: nil)
             }
             .navigationDestination(isPresented: $showWatchLater) {
-                WatchLaterView()
+                WatchLaterView().id(loginSession.selectedID(for: .main))
+            }
+            .navigationDestination(isPresented: $showSubscriptions) {
+                LibraryFoldersView(subscriptions: true)
+            }
+            .navigationDestination(isPresented: $showFavorites) {
+                LibraryFoldersView(subscriptions: false)
             }
             .navigationDestination(item: $followingRoute) { route in
                 FollowingListView(mid: route.mid)
@@ -182,25 +227,68 @@ struct MyView: View {
         }
     }
 
-    private var quickActionRow: some View {
-        HStack(spacing: 12) {
-            quickActionButton(
-                title: L10n.string("离线缓存"),
-                systemImage: "square.and.arrow.down",
-                action: { showOfflineCache = true }
-            )
+    private func librarySection(_ section: MyPageSection) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Button {
+                    openFullList(section)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(LocalizedStringKey(section.title))
+                            .font(.title2.weight(.bold))
+                        Image(systemName: "chevron.right")
+                            .font(.body.weight(.semibold)).foregroundStyle(.tertiary)
+                        Spacer(minLength: 8)
+                    }
+                    .padding(.vertical, 16)
+                    .frame(minHeight: 72)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityLabel("\(section.title)，查看全部")
+                .accessibilityIdentifier("my.all.\(section.rawValue)")
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if expandedSections.contains(section) { expandedSections.remove(section) }
+                        else { expandedSections.insert(section) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .rotationEffect(.degrees(expandedSections.contains(section) ? 90 : 0))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 30, height: 30)
+                        .background(Color(.tertiarySystemFill), in: Circle())
+                        .frame(width: 44, height: 72)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("\(section.title)，\(expandedSections.contains(section) ? "收起" : "展开")")
+                .accessibilityIdentifier("my.section.\(section.rawValue)")
+                .accessibilityValue(expandedSections.contains(section) ? "已展开" : "已收起")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            if expandedSections.contains(section) {
+                MyPagePreview(section: section, namespace: previewNamespace,
+                    openVideo: { video, source in
+                        selectedPreviewSource = source
+                        selectedPreviewVideo = video
+                    },
+                    openFolder: { folder, source in
+                        selectedPreviewSource = source
+                        selectedPreviewFolder = folder
+                    })
+                    .transition(.opacity)
+            }
+        }
+    }
 
-            quickActionButton(
-                title: L10n.string("观看记录"),
-                systemImage: "memories",
-                action: { showHistory = true }
-            )
-
-            quickActionButton(
-                title: L10n.string("稍后再看"),
-                systemImage: "clock.badge",
-                action: { showWatchLater = true }
-            )
+    private func openFullList(_ section: MyPageSection) {
+        switch section {
+        case .offline: showOfflineCache = true
+        case .history: showHistory = true
+        case .subscriptions: showSubscriptions = true
+        case .watchLater: showWatchLater = true
+        case .favorites: showFavorites = true
         }
     }
 
@@ -248,30 +336,6 @@ struct MyView: View {
         .frame(minWidth: 44)
     }
 
-    private func quickActionButton(title: String, systemImage: String) -> some View {
-        quickActionButton(title: title, systemImage: systemImage, action: {})
-    }
-
-    private func quickActionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button {
-            action()
-        } label: {
-            VStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.primary)
-
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 72)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
 }
 
 #Preview {

@@ -98,6 +98,7 @@ class VideoDetailViewModel {
     private var historyReportTimer: Timer?
     private var historyReportStartTask: Task<Void, Never>?
     private var videoShotWarmTask: Task<Void, Never>?
+    private var lastReportedAccountID: String?
     private var lastReportedProgress = 0
     private var playerRebuildToken = UUID()
     private var isRebuildingPlayer = false
@@ -121,13 +122,14 @@ class VideoDetailViewModel {
         self.title = title
         self.cover = cover
         self.requestedInitialSeekTime = initialSeekTime
-        self.player = MPVKitPlayer()
+        // SwiftUI can construct temporary State values while evaluating a
+        // destination. Create the playback session only once a stream is ready.
     }
 
     // MARK: - Load Video Data
 
     func loadVideoData() async {
-        guard videoDetail == nil, !isLoading else { return }
+        guard !Task.isCancelled, videoDetail == nil, !isLoading else { return }
         isLoading = true
         error = nil
         playerInfo = nil
@@ -228,8 +230,17 @@ class VideoDetailViewModel {
                         cid: detail.cid
                     )
                     let playerInfoData = playerInfoResponse.data
-                    let lastPlayCID = playerInfoData?.lastPlayCid
-                    let lastPlayTimeMilliseconds = playerInfoData?.lastPlayTime
+                    let session = LoginSession.shared
+                    var historyInfo = playerInfoData
+                    if !session.incognito, session.account(for: .history) != nil,
+                       session.selectedID(for: .history) != session.selectedID(for: .playback) {
+                        historyInfo = try? await BiliAPI.shared.fetchPlayerWbiV2(
+                            bvid: bvid, cid: detail.cid, role: .history
+                        ).data
+                    }
+                    let useHistory = !session.incognito && session.account(for: .history) != nil
+                    let lastPlayCID = useHistory ? historyInfo?.lastPlayCid : nil
+                    let lastPlayTimeMilliseconds = useHistory ? historyInfo?.lastPlayTime : nil
                     let resolvedInitialSeekTime: Double?
                     if let lastPlayTimeMilliseconds, lastPlayTimeMilliseconds > 0 {
                         let rawTime = Double(lastPlayTimeMilliseconds)
@@ -357,6 +368,8 @@ class VideoDetailViewModel {
                     self.isPlayingOfflineCache = true
                     self.isLoading = false
 
+                    guard !Task.isCancelled else { return }
+                    if self.player == nil { self.player = MPVKitPlayer() }
                     if let player = self.player {
                         player.play(stream: cachedAsset.stream)
                         player.setPlaybackRate(self.selectedPlaybackRate)
@@ -398,6 +411,8 @@ class VideoDetailViewModel {
                     self.isPlayingOfflineCache = false
                     self.isLoading = false
 
+                    guard !Task.isCancelled else { return }
+                    if self.player == nil { self.player = MPVKitPlayer() }
                     if let player = self.player {
                         player.play(stream: self.dashStream!)
                         player.setPlaybackRate(self.selectedPlaybackRate)
@@ -825,7 +840,7 @@ class VideoDetailViewModel {
 
     @MainActor
     func loadDanmakuSegment(cid: Int? = nil, segmentIndex: Int = 1) async {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         let targetCid = cid ?? self.cid
         guard targetCid > 0 else {
             danmakuError = "无效的 cid"
@@ -996,7 +1011,7 @@ class VideoDetailViewModel {
 
     @MainActor
     func preloadDanmakuIfNeeded(currentTime: Double) async {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         let targetCid = cid
         guard targetCid > 0 else { return }
 
@@ -1358,11 +1373,13 @@ class VideoDetailViewModel {
 	    }
 
     private func reportHistoryIfNeeded(with player: MPVKitPlayer) {
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
         let currentProgress = Int(player.currentTime)
 
         // 如果进度有改变，才上报
-        if currentProgress != lastReportedProgress {
+        let accountID = LoginSession.shared.selectedID(for: .history)
+        if currentProgress != lastReportedProgress || lastReportedAccountID != accountID {
+            lastReportedAccountID = accountID
             lastReportedProgress = currentProgress
 
             Task {
@@ -1381,7 +1398,7 @@ class VideoDetailViewModel {
         historyReportTimer?.invalidate()
         historyReportTimer = nil
 
-        guard !isPlayingOfflineCache else { return }
+        guard !isPlayingOfflineCache, LoginSession.shared.shouldReportHistory else { return }
 
         // 退出时最后上报一次
         let finalProgress = Int(player.currentTime)

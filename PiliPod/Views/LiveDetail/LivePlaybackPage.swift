@@ -24,6 +24,7 @@ struct LivePlaybackPage: View {
     }
 
     let room: LiveCardModel
+    let usesNativeZoomTransition: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: LivePlaybackViewModel
     @State private var player = MPVKitPlayer()
@@ -40,8 +41,9 @@ struct LivePlaybackPage: View {
     @StateObject private var audioSessionManager = VideoPlaybackAudioSessionManager()
 #endif
 
-    init(room: LiveCardModel) {
+    init(room: LiveCardModel, usesNativeZoomTransition: Bool = false) {
         self.room = room
+        self.usesNativeZoomTransition = usesNativeZoomTransition
         _viewModel = State(initialValue: LivePlaybackViewModel(room: room))
     }
 
@@ -73,7 +75,9 @@ struct LivePlaybackPage: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .background(NavigationPopGestureEnabler())
+        .background {
+            if !usesNativeZoomTransition { NavigationPopGestureEnabler() }
+        }
         .navigationDestination(item: $selectedUserSpaceRoute) { route in
             UserSpaceView(mid: route.mid)
         }
@@ -89,6 +93,7 @@ struct LivePlaybackPage: View {
             startMediaControlSyncLoopIfNeeded()
 #endif
             await viewModel.loadPlaybackIfNeeded()
+            guard !Task.isCancelled else { return }
 #if canImport(UIKit)
             audioSessionManager.activate()
             syncSystemMediaControl()

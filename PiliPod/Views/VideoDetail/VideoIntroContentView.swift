@@ -47,6 +47,9 @@ struct IntroTabDisplayModel: Equatable {
 
 struct IntroTabContentView: View, Equatable {
     let model: IntroTabDisplayModel
+    let showsCommentPreview: Bool
+    let commentCount: Int
+    let commentSheetHeight: CGFloat
     let namespace: Namespace.ID
     let onOpenOwner: (Int, Int?) -> Void
     let onToggleFollow: () -> Void
@@ -68,7 +71,9 @@ struct IntroTabContentView: View, Equatable {
     let onOpenRelatedVideo: (VideoItem) -> Void
 
     static func == (lhs: IntroTabContentView, rhs: IntroTabContentView) -> Bool {
-        lhs.model == rhs.model
+        lhs.model == rhs.model && lhs.showsCommentPreview == rhs.showsCommentPreview
+            && lhs.commentCount == rhs.commentCount
+            && lhs.commentSheetHeight == rhs.commentSheetHeight
     }
 
     private var hasIntroDescription: Bool {
@@ -250,6 +255,13 @@ struct IntroTabContentView: View, Equatable {
 
                 if showsVideoPages {
                     videoPageSection
+                }
+
+                if showsCommentPreview {
+                    Divider()
+                    VideoCommentPreviewView(aid: model.aid, commentCount: commentCount, commentSheetHeight: commentSheetHeight) { mid in
+                        onOpenOwner(mid, model.aid)
+                    }
                 }
 
                 if model.relatedIsLoading

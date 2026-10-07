@@ -159,9 +159,9 @@ struct VideoDetailPage: View {
     @State private var isDanmakuListPresented = false
     @State private var selectedSubtitleID: String?
     @State private var danmakuListBlockLevel = DanmakuConfigStore.load().blockLevel
-    @Namespace private var danmakuActionGlass
     @State private var isFullscreen = false
     @State private var fullscreenTrigger: FullscreenTrigger = .none
+    @State private var usesLegacyVideoDetailTabs = AudioVideoSettingsStore.load().usesLegacyVideoDetailTabs
     @State private var selectedTab: VideoDetailTab = .intro
     @State private var isDraggingVideoPageStrip = false
     @State private var toastMessage: String?
@@ -195,10 +195,11 @@ struct VideoDetailPage: View {
     let video: VideoItem
     let namespace: Namespace.ID
     let onBack: () -> Void
+    let usesNativeZoomTransition: Bool
     private let maxHorizontalSeekOffset: TimeInterval = 50
     private let verticalBrightnessDragSensitivity: Double = 2.5
-    // Keep this strip completely free of SwiftUI drag recognizers so UIKit's
-    // interactive pop gesture has an uncontested edge-pan area.
+    // Player seeking and the content pager exclude this strip; it belongs
+    // to navigation, including the edge-only SwiftUI dismissal fallback.
     private let nonFullscreenBackSwipeReservedWidth: CGFloat = 32
 
     private var heroID: String { "videoHero.\(video.bvid)" }
@@ -325,10 +326,11 @@ struct VideoDetailPage: View {
         return min(size.width / aspectRatio, size.width * (4.0 / 3.0))
     }
 
-    init(video: VideoItem, namespace: Namespace.ID, onBack: @escaping () -> Void) {
+    init(video: VideoItem, namespace: Namespace.ID, usesNativeZoomTransition: Bool = false, onBack: @escaping () -> Void) {
         self.video = video
         self.namespace = namespace
         self.onBack = onBack
+        self.usesNativeZoomTransition = usesNativeZoomTransition
         _viewModel = State(initialValue: VideoDetailViewModel(
             bvid: video.bvid,
             cid: video.cid ?? 0,
@@ -385,6 +387,10 @@ struct VideoDetailPage: View {
                             },
                             currentVideoDurationFallback: resolvedVideoDuration,
                             onBack: { handleBackAction() },
+                            onShowDanmakuList: {
+                                danmakuListBlockLevel = danmakuConfig.blockLevel
+                                isDanmakuListPresented = true
+                            },
                             onShowDanmakuSettingsSheet: {
                                 isDanmakuSettingsPresented = true
                             },
@@ -517,7 +523,13 @@ struct VideoDetailPage: View {
                         ZStack(alignment: .bottom) {
                             VStack(spacing: 0) {
                                 tabBar
-                                tabContent(width: geo.size.width)
+                                Group {
+                                    if usesLegacyVideoDetailTabs {
+                                        tabContent(width: geo.size.width)
+                                    } else {
+                                        introTabContent(commentSheetHeight: max(1, geo.size.height - nonFullscreenPlayerHeight(for: geo.size)))
+                                    }
+                                }
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -747,7 +759,26 @@ struct VideoDetailPage: View {
                     Color(.systemBackground).ignoresSafeArea(edges: .bottom)
                 }
             }
-            .background(NavigationPopGestureEnabler())
+            .background {
+                if !usesNativeZoomTransition { NavigationPopGestureEnabler() }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                    .onEnded { value in
+                        guard !usesNativeZoomTransition, !isFullscreen, !isClosing,
+                              value.startLocation.x <= nonFullscreenBackSwipeReservedWidth,
+                              value.translation.width > max(80, geo.size.width * 0.2),
+                              value.translation.width > abs(value.translation.height) * 2
+                        else { return }
+                        // Some SwiftUI hosts consume UIKit's edge recognizer.
+                        // Keep an edge-only fallback and let NavigationStack
+                        // animate the same dismissal as the back button.
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            requestPageDismissal()
+                        }
+                    },
+                including: usesNativeZoomTransition ? .subviews : .all
+            )
             .allowsHitTesting(!isClosing)
         }
 #if canImport(UIKit)
@@ -761,6 +792,7 @@ struct VideoDetailPage: View {
 #endif
         .onAppear {
             isClosing = false
+            usesLegacyVideoDetailTabs = AudioVideoSettingsStore.load().usesLegacyVideoDetailTabs
             ManualPictureInPictureCoordinator.shared.stopIfNeeded()
             danmakuConfig = DanmakuConfigStore.load()
             isDanmakuEnabled = danmakuConfig.isEnabled
@@ -787,6 +819,7 @@ struct VideoDetailPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .audioVideoSettingsDidChange)) { notification in
             if let settings = notification.object as? AudioVideoSettings {
                 progressBarStyle = settings.videoProgressBarStyle
+                usesLegacyVideoDetailTabs = settings.usesLegacyVideoDetailTabs
             }
         }
         .onChange(of: sponsorBlockSettings) { _, newValue in
@@ -829,11 +862,12 @@ struct VideoDetailPage: View {
             configureAudioSessionHandlers()
 #endif
             await bindableViewModel.loadVideoData()
+            guard !Task.isCancelled else { return }
             refreshCachedIntroDescription()
             ensureSponsorSegmentsLoadedIfNeeded()
 #if canImport(UIKit)
-            audioSessionManager.activate()
             if let player = bindableViewModel.player {
+                audioSessionManager.activate()
                 Task { @MainActor in
                     await syncSystemMediaControlWhenPlaybackStarts(player: player)
                 }
@@ -1148,57 +1182,20 @@ struct VideoDetailPage: View {
 
     private var tabBar: some View {
         HStack(spacing: 18) {
-            ForEach(VideoDetailTab.allCases, id: \.self) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Text(titleForTab(tab))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                        .padding(.vertical, 6)
+            if usesLegacyVideoDetailTabs {
+                ForEach(VideoDetailTab.allCases, id: \.self) { tab in
+                    Button {
+                        selectedTab = tab
+                    } label: {
+                        Text(titleForTab(tab))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             Spacer()
-
-            GlassEffectContainer {
-                HStack(spacing: 8) {
-                    if isDanmakuEnabled {
-                        Button {
-                            danmakuListBlockLevel = danmakuConfig.blockLevel
-                            isDanmakuListPresented = true
-                        } label: {
-                            Image(systemName: "list.bullet.indent")
-                                .font(.system(size: 16, weight: .medium))
-                                .frame(width: 32, height: 32)
-                        }
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .glassEffectID("VideoDetailDanmakuList", in: danmakuActionGlass)
-                        .glassEffectTransition(.matchedGeometry)
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("弹幕列表")
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
-
-                    Button {
-                        isDanmakuEnabled.toggle()
-                    } label: {
-                        Image(isDanmakuEnabled ? "DanmakuOn" : "DanmakuOff")
-                            .renderingMode(.template)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 16, height: 16)
-                            .foregroundStyle(.primary)
-                            .frame(width: 32, height: 32)
-                    }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .glassEffectID("VideoDetailDanmakuToggle", in: danmakuActionGlass)
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("弹幕")
-                    .accessibilityValue(isDanmakuEnabled ? "已开启" : "已关闭")
-                }
-            }
-            .animation(.spring(response: 0.42, dampingFraction: 0.8), value: isDanmakuEnabled)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -1225,7 +1222,7 @@ struct VideoDetailPage: View {
             isSwipeEnabled: !isDraggingVideoPageStrip,
             leadingSwipeExclusionWidth: nonFullscreenBackSwipeReservedWidth,
             introContent: {
-                introTabContent
+                introTabContent()
             },
             commentsContent: {
                 VideoCommentsTabView(
@@ -1290,11 +1287,14 @@ struct VideoDetailPage: View {
         )
     }
 
-    private var introTabContent: some View {
+    private func introTabContent(commentSheetHeight: CGFloat = 1) -> some View {
         Group {
             if let model = introTabDisplayModel {
                 IntroTabContentView(
                     model: model,
+                    showsCommentPreview: !usesLegacyVideoDetailTabs,
+                    commentCount: viewModel.videoDetail?.stat.reply ?? 0,
+                    commentSheetHeight: commentSheetHeight,
                     namespace: namespace,
                     onOpenOwner: { mid, aid in
                         viewModel.prepareForNestedNavigation()
@@ -1776,12 +1776,17 @@ struct VideoDetailPage: View {
 
     private func syncSystemMediaControlWhenPlaybackStarts(player: MPVKitPlayer) async {
         for _ in 0..<20 {
+            guard !Task.isCancelled, !isClosing else { return }
             let snapshot = player.uiSnapshot
             if snapshot.isPlaying {
                 syncSystemMediaControl(reason: "initial-playback-start")
                 return
             }
-            try? await Task.sleep(nanoseconds: 100000000)
+            do {
+                try await Task.sleep(nanoseconds: 100000000)
+            } catch {
+                return
+            }
         }
     }
 
@@ -1987,7 +1992,7 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
     @ViewBuilder let introContent: () -> IntroContent
     @ViewBuilder let commentsContent: () -> CommentsContent
 
-    @GestureState private var dragTranslation: CGFloat = 0
+    @State private var dragTranslation: CGFloat = 0
 
     private var currentIndex: CGFloat {
         switch selectedTab {
@@ -2008,15 +2013,14 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
                 .frame(width: width)
                 .frame(maxHeight: .infinity, alignment: .top)
         }
+        .offset(x: -currentIndex * width + dragOffset)
         .frame(width: width, alignment: .leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .offset(x: -currentIndex * width + dragOffset)
         .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.86), value: selectedTab)
         .contentShape(Rectangle())
-        // A transparent overlay here would intercept ScrollView and button
-        // touches. Keep the pager gesture simultaneous with the content
-        // instead, and leave the edge strip inert in the gesture callbacks.
-        .simultaneousGesture(pagerGesture)
+        // Reject unrelated pans before recognition, rather than ignoring their
+        // callbacks after a SwiftUI DragGesture has already claimed the touch.
+        .gesture(pagerGesture)
         .clipped()
     }
 
@@ -2025,27 +2029,21 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
         return dragTranslation
     }
 
-    private var pagerGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .updating($dragTranslation) { value, state, _ in
-                guard isSwipeEnabled else { return }
-                guard value.startLocation.x > leadingSwipeExclusionWidth else { return }
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-
-                let translation = value.translation.width
+    private var pagerGesture: VideoDetailTabPanGesture {
+        VideoDetailTabPanGesture(
+            isEnabled: isSwipeEnabled,
+            isIntro: selectedTab == .intro,
+            leadingExclusionWidth: leadingSwipeExclusionWidth,
+            onChanged: { translation in
                 if selectedTab == .intro {
-                    state = max(-width, min(0, translation))
+                    dragTranslation = max(-width, min(0, translation))
                 } else {
-                    state = max(0, min(width, translation))
+                    dragTranslation = max(0, min(width, translation))
                 }
-            }
-            .onEnded { value in
-                guard isSwipeEnabled else { return }
-                guard value.startLocation.x > leadingSwipeExclusionWidth else { return }
-                let dx = value.translation.width
-                let dy = value.translation.height
-                guard abs(dx) > abs(dy) else { return }
-
+            },
+            onEnded: { dx in
+                defer { dragTranslation = 0 }
+                guard isSwipeEnabled, let dx else { return }
                 let threshold = width * 0.2
                 switch selectedTab {
                 case .intro:
@@ -2056,8 +2054,70 @@ private struct TabPager<IntroContent: View, CommentsContent: View>: View {
                     selectedTab = .intro
                 }
             }
+        )
     }
 }
+
+#if DEBUG
+/// Network-free UI test surface using the production pager and navigation setup.
+struct VideoDetailGestureTestRoot: View {
+    @State private var isPresented = false
+    @Namespace private var namespace
+
+    var body: some View {
+        NavigationStack {
+            Button("Open detail") { isPresented = true }
+                .accessibilityIdentifier("gesture.open")
+                .matchedTransitionSource(id: "gesture.detail", in: namespace)
+                .navigationDestination(isPresented: $isPresented) {
+                    VideoDetailGestureTestContent()
+                        .navigationTransition(.zoom(sourceID: "gesture.detail", in: namespace))
+                }
+        }
+    }
+}
+
+private struct VideoDetailGestureTestContent: View {
+    @State private var selectedTab: VideoDetailPage.VideoDetailTab = .intro
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                Color.black.frame(height: 160)
+                Text(selectedTab.rawValue)
+                    .accessibilityIdentifier(selectedTab == .intro ? "gesture.tab.intro" : "gesture.tab.comments")
+                    .frame(height: 44)
+                TabPager(
+                    selectedTab: $selectedTab,
+                    width: geometry.size.width,
+                    isSwipeEnabled: true,
+                    leadingSwipeExclusionWidth: 32,
+                    introContent: {
+                        ScrollView {
+                            VStack {
+                                ForEach(0..<80) { index in
+                                    Text("Intro row \(index)")
+                                        .frame(maxWidth: .infinity, minHeight: 48)
+                                        .accessibilityIdentifier("gesture.intro.\(index)")
+                                }
+                            }
+                        }
+                    },
+                    commentsContent: {
+                        List(0..<80, id: \.self) { index in
+                            Text("Comment row \(index)")
+                        }
+                        .listStyle(.plain)
+                    }
+                )
+            }
+        }
+        .background(NavigationPopGestureEnabler())
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+#endif
 
 #if canImport(UIKit)
 struct SystemVolumeController {
@@ -2224,18 +2284,15 @@ struct VideoActionBar: View {
         let pressID = UUID()
         activeTriplePressID = pressID
         isTripleTouching = true
-        hasTripleChargeStarted = false
+        hasTripleCompleted = false
+        hasTripleChargeStarted = true
+        isTripleCharging = true
+        withAnimation(.easeIn(duration: 1.4)) {
+            tripleChargeProgress = 1
+        }
+        tripleChargeHaptics.start()
         triplePressTask = Task { @MainActor in
-            guard await waitForTriplePress(milliseconds: 500) else { return }
-            guard isTripleTouching, activeTriplePressID == pressID else { return }
-
-            hasTripleChargeStarted = true
-            isTripleCharging = true
-            withAnimation(.easeIn(duration: 1.4)) {
-                tripleChargeProgress = 1
-            }
-            tripleChargeHaptics.start()
-
+            // UIKit already recognized a stationary 0.5-second long press.
             guard await waitForTriplePress(milliseconds: 1_400) else { return }
             guard isTripleTouching, activeTriplePressID == pressID else { return }
 
@@ -2274,7 +2331,6 @@ struct VideoActionBar: View {
             return
         }
 
-        let shouldHandleAsTap = !hasTripleChargeStarted
         let shouldRestore = hasTripleChargeStarted && !hasTripleCompleted
 
         isTripleTouching = false
@@ -2296,10 +2352,6 @@ struct VideoActionBar: View {
                 tripleCompletionScale = 1
             }
         }
-
-        if shouldHandleAsTap {
-            onToggleLike()
-        }
     }
 
     private func cancelTriplePress() {
@@ -2308,6 +2360,12 @@ struct VideoActionBar: View {
         triplePressTask?.cancel()
         triplePressTask = nil
         tripleChargeHaptics.stop()
+        isTripleCharging = false
+        isTripleCompletionAnimating = false
+        hasTripleChargeStarted = false
+        hasTripleCompleted = false
+        tripleChargeProgress = 0
+        tripleCompletionScale = 1
     }
 
     private func requestTripleLike() {
@@ -2385,17 +2443,15 @@ private struct VideoTripleLikeButton: View {
                 completionScale: completionScale
             )
         )
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard !isDisabled else { return }
-                    onPressStarted()
-                }
-                .onEnded { _ in
-                    guard !isDisabled else { return }
-                    onPressEnded()
-                }
-        )
+        .onTapGesture {
+            guard !isDisabled else { return }
+            onTap()
+        }
+        .gesture(VideoTripleLikePressGesture(
+            isEnabled: !isDisabled,
+            onStarted: onPressStarted,
+            onFinished: onPressEnded
+        ))
         .opacity(isDisabled ? 0.6 : 1)
     }
 }
@@ -3282,6 +3338,7 @@ private struct MoreActionsMenuView: View, Equatable {
     let onReloadVideo: () -> Void
     let onStartPictureInPicture: () -> Void
     let onShowVideoStreamInfo: () -> Void
+    let onShowDanmakuList: () -> Void
 
     static func == (lhs: MoreActionsMenuView, rhs: MoreActionsMenuView) -> Bool {
         true
@@ -3290,6 +3347,14 @@ private struct MoreActionsMenuView: View, Equatable {
     var body: some View {
         // 保持菜单结构静态，避免父视图因 currentTime 高频更新时重建系统 Menu。
         Menu {
+            Button {
+                onUserInteracted()
+                onShowDanmakuList()
+            } label: {
+                Image(systemName: "list.bullet.indent")
+                Text("弹幕列表")
+            }
+
             Button {
                 onUserInteracted()
                 onStartPictureInPicture()
@@ -3381,6 +3446,29 @@ struct PlayerLoadingOverlay: View {
     }
 }
 
+enum PlayerControlsLayout {
+    static let leadingButtonSize: CGFloat = 40
+    static let padding: CGFloat = 12
+}
+
+struct PlayerLeadingControlButton: View {
+    let systemName: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: PlayerControlsLayout.leadingButtonSize, height: PlayerControlsLayout.leadingButtonSize)
+        }
+        .background(Circle().fill(Color.black.opacity(0.2)))
+        .glassEffect(.clear.interactive(), in: .circle)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
 struct PlayerControlsOverlay: View {
     @Binding var danmakuEnabled: Bool
 
@@ -3417,6 +3505,7 @@ struct PlayerControlsOverlay: View {
     let onReloadVideo: () -> Void
     let onStartPictureInPicture: () -> Void
     let onShowVideoStreamInfo: () -> Void
+    let onShowDanmakuList: () -> Void
     let onSelectQuality: (Int) -> Void
     let onSelectPlaybackRate: (Double) -> Void
     let onSeekPreviewChanged: (TimeInterval?) -> Void
@@ -3440,20 +3529,10 @@ struct PlayerControlsOverlay: View {
         ZStack(alignment: .top) {
             HStack(spacing: 12) {
                 // 左上角返回
-                Button(action: {
+                PlayerLeadingControlButton(systemName: "chevron.left", accessibilityLabel: "返回") {
                     onUserInteracted()
                     onBack()
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 40, height: 40)
                 }
-                .background(Circle().fill(Color(.black.opacity(0.2))))
-                .glassEffect(
-                    .clear.interactive(),
-                    in: .circle
-                )
 
                 // 视频标题
                 if(isFullscreen){
@@ -3526,6 +3605,13 @@ struct PlayerControlsOverlay: View {
                         in: .circle
                     )
 
+                    actionCircleButton(imageName: danmakuEnabled ? "DanmakuOn" : "DanmakuOff") {
+                        onUserInteracted()
+                        danmakuEnabled.toggle()
+                    }
+                    .accessibilityLabel("弹幕")
+                    .accessibilityValue(danmakuEnabled ? "已开启" : "已关闭")
+
                     // 右上角弹幕设置按钮
                     Button(action: {
                         onUserInteracted()
@@ -3552,11 +3638,12 @@ struct PlayerControlsOverlay: View {
                     onCacheVideo: onCacheVideo,
                     onReloadVideo: onReloadVideo,
                     onStartPictureInPicture: onStartPictureInPicture,
-                    onShowVideoStreamInfo: onShowVideoStreamInfo
+                    onShowVideoStreamInfo: onShowVideoStreamInfo,
+                    onShowDanmakuList: onShowDanmakuList
                 )
                 .equatable()
             }
-            .padding(12)
+            .padding(PlayerControlsLayout.padding)
             if isFullscreen {
                 LandscapeSystemStatusView()
                     .frame(maxWidth: .infinity)
@@ -4138,10 +4225,7 @@ private actor VideoShotSpriteLoader {
             forHTTPHeaderField: "User-Agent"
         )
 
-        let cookie = LoginSession.shared.cookieString
-        if !cookie.isEmpty {
-            request.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
+        AccountRequest.apply(LoginSession.shared.account(for: .playback), to: &request)
 
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let httpResponse = response as? HTTPURLResponse,
