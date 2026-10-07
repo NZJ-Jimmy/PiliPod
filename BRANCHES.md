@@ -67,3 +67,18 @@ git push origin codex/integration
 - 2026-10-06 新组合 API 版本 b933819 编译及 19 项单元测试通过，6 项 UI 测试中下拉刷新操作未触发更新，其他 5 项通过（包含视频原生返回和滚动位置）。保留失败记录，UI 测试改为列表内部明确起落点拖拽，保持刷新结果断言后重新验证。
 - 2026-10-06 重跑 9257df5：19 项单元测试、下拉刷新及其他 4 项 UI 测试通过；视频测试在打开详情后查询背后卡片 hittability 时由 XCTest 报 Activation point invalid。改为检查详情页存在、原生捏合退出后检查详情消失，再验证原卡片可点击、原位置及未刷新；产品转场行为未修改，重新验证独立 IPA。
 - 2026-10-06 服务端组合筛选最终验证：提交 1c90a7d 的 19 项单元测试、6 项 UI 回归（包括刷新、原生捏合返回和滚动位置）及 Release 归档全部通过。已下载独立未签名 IPA，来源提交、SHA-256、Payload 与 arm64 校验通过。[构建记录](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37485812590)，[IPA 产物](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37485812590/artifacts/11423816501)。授权只读真实账号 API 验证已完成，番剧无非空样本，-352/HTTP 302 未复现，真机 UI 仍待测试；未整合。
+## 原生私信增量修复（2026-10-07）
+
+`codex/private-message-native` 继续维护原生 SwiftUI 方案。原 PR #10 已合入 `codex/integration`；本次通过增量 Draft PR [#13](https://github.com/NZJ-Jimmy/PiliPod/pull/13) 提交，不复用已合并的 PR，也不把整合分支反向合回功能分支。
+
+本次修复照片面板收起/展开时的网格列数切换，以及查看历史再回到底部后键盘/面板不再抬起消息的问题。照片面板收起、展开和再次收起均保持三列；回到底部后恢复键盘与面板的底部跟随，浏览历史时保留当前位置。
+
+代码提交 `5e0b56b56d0d20a2c8007f4e79c3df0df609098e` 的 [Actions #37531663469](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37531663469) 已成功：29 项单元测试、6 项私信 UI 测试全部通过，Release 未签名测试 IPA 已归档并上传。下载产物的 SHA256 已与工作流校验文件核对一致；尚未真机验证。后续仅更新此记录的提交不改变上述已验证代码。
+
+增量 PR #13 保持 Draft，尚未合入整合分支；当前与整合分支的 `BRANCHES.md` 有记录冲突，准备组合测试时应在整合分支处理，不能把整合分支反向合回功能分支。
+
+## 最新整合更新
+
+PR #12（动态 UP 主与内容类别筛选，head a882bbd）及 #13（原生私信三列选图与底部跟随修复，head 965b3eb）已合入 codex/integration。以上功能章节中的未整合/Draft 描述是当时的历史状态，以本节及 GitHub 当前状态为准。
+
+整合冲突处理保留所有 Debug 测试入口，并使动态筛选 API 使用主账号快照，保留新筛选参数、请求头、12 秒超时与错误处理。两项功能独立验证均已通过，新的组合验证待 Actions 结果确认；未修改 main 或上游，原功能分支保留。

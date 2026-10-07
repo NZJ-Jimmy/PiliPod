@@ -2,6 +2,51 @@ import XCTest
 
 final class ConversationUITests: XCTestCase {
     @MainActor
+    func testBottomFollowingAfterReturningFromHistory() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--uitest-conversation"]
+        app.launch()
+        let messages = app.scrollViews["conversation.messages"]
+        XCTAssertTrue(messages.waitForExistence(timeout: 15))
+        let latest = app.staticTexts["多行输入和面板布局测试"]
+        for _ in 0..<4 { messages.swipeDown() }
+        XCTAssertFalse(latest.isHittable, "The test must first leave the bottom")
+
+        let input = app.descendants(matching: .any)["conversation.input"].firstMatch
+        input.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(latest.isHittable, "Opening the keyboard while reading history must not jump to latest")
+        // Close the keyboard through the existing input-panel controls, then
+        // return to bottom with no input surface visible before reopening it.
+        app.buttons["选择表情"].tap()
+        let historyPanel = app.otherElements["conversation.panel"].firstMatch
+        XCTAssertTrue(historyPanel.waitForExistence(timeout: 5))
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
+            evaluatedWith: app.keyboards.firstMatch)], timeout: 5), .completed)
+        XCTAssertFalse(latest.isHittable, "Opening a panel while reading history must not jump to latest")
+        let historyHandle = historyPanel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        historyHandle.press(forDuration: 0.1,
+            thenDragTo: historyHandle.withOffset(CGVector(dx: 0, dy: 260)))
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
+            evaluatedWith: historyPanel)], timeout: 5), .completed)
+        for _ in 0..<8 { messages.swipeUp() }
+        input.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        assertLatestVisible(latest, in: messages)
+        capture(app, "conversation-bottom-again-keyboard")
+
+        app.buttons["选择表情"].tap()
+        let panel = app.otherElements["conversation.panel"].firstMatch
+        XCTAssertTrue(panel.waitForExistence(timeout: 5))
+        assertLatestVisible(latest, in: messages)
+        capture(app, "conversation-bottom-again-panel")
+        let handle = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        handle.press(forDuration: 0.1, thenDragTo: handle.withOffset(CGVector(dx: 0, dy: -180)))
+        assertLatestVisible(latest, in: messages)
+        capture(app, "conversation-bottom-again-expanded-panel")
+    }
+
+    @MainActor
     func testSendDuringHistoryLoadKeepsLatestVisible() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--uitest-conversation", "--uitest-slow-history"]
@@ -64,6 +109,8 @@ final class ConversationUITests: XCTestCase {
         let input = app.descendants(matching: .any)["conversation.input"].firstMatch
         input.tap()
         input.typeText("Send from history")
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "value == %@", "Send from history"),
+            evaluatedWith: input)], timeout: 5), .completed)
         app.buttons["conversation.send"].tap()
         let sent = app.staticTexts["Send from history"]
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: sent)], timeout: 10), .completed)
@@ -154,7 +201,19 @@ final class ConversationUITests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate(format: "exists == false"),
                 evaluatedWith: onboarding)], timeout: 5), .completed)
         }
+        assertThreePhotoColumns(in: app, panel: panel)
         capture(app, "conversation-photos-before-selection")
+        let photoCollapsedHeight = panel.frame.height
+        let photoHandle = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        photoHandle.press(forDuration: 0.1, thenDragTo: photoHandle.withOffset(CGVector(dx: 0, dy: -180)))
+        XCTAssertGreaterThan(panel.frame.height, photoCollapsedHeight + 60)
+        assertThreePhotoColumns(in: app, panel: panel)
+        capture(app, "conversation-photos-expanded-three-columns")
+        let expandedPhotoHandle = panel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+        expandedPhotoHandle.press(forDuration: 0.1,
+            thenDragTo: expandedPhotoHandle.withOffset(CGVector(dx: 0, dy: 180)))
+        XCTAssertLessThan(abs(panel.frame.height - photoCollapsedHeight), 4)
+        assertThreePhotoColumns(in: app, panel: panel)
         // Native grid image accessibility nodes have no hittable point; tap their actual on-screen center.
         // A remote picker can retain accessibility nodes for scrolled-off thumbnails.
         // Choose a center inside both the panel and the app instead of its first node.
@@ -169,7 +228,10 @@ final class ConversationUITests: XCTestCase {
         let thumbnail = try XCTUnwrap(visiblePhoto, "A visible native photo thumbnail is required")
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: thumbnail.frame.midX, dy: thumbnail.frame.midY)).tap()
-        XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 15), "Selecting a photo must immediately add it to the composer")
+        // Thumbnail selection is immediate, but the remote picker imports the
+        // full asset asynchronously and can take over 15 seconds on a cold CI simulator.
+        XCTAssertTrue(app.staticTexts["conversation.photo-count"].waitForExistence(timeout: 30),
+            "Selecting a photo must add it to the composer when import completes")
         XCTAssertTrue(panel.exists, "Continuous selection must keep the picker open")
         XCTAssertGreaterThanOrEqual(app.buttons["移除图片"].frame.width, 44)
         XCTAssertFalse(app.buttons["添加 1 张"].exists)
@@ -187,5 +249,25 @@ final class ConversationUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor private func assertLatestVisible(_ latest: XCUIElement, in messages: XCUIElement) {
+        let result = XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
+            latest.isHittable && latest.frame.maxY <= messages.frame.maxY + 1
+        }, evaluatedWith: latest)], timeout: 5)
+        XCTAssertEqual(result, .completed,
+            "Returning to bottom must restore following through keyboard and panel resizing")
+    }
+
+    @MainActor private func assertThreePhotoColumns(in app: XCUIApplication, panel: XCUIElement) {
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: NSPredicate { _, _ in
+            let bounds = panel.frame.intersection(app.frame)
+            let widths = app.images.matching(identifier: "PXGGridLayout-Info").allElementsBoundByIndex
+                .map(\.frame).filter { $0.intersects(bounds) && $0.width > 0 }.map(\.width)
+            return !widths.isEmpty && widths.allSatisfy {
+                $0 > bounds.width * 0.28 && $0 < bounds.width * 0.36
+            }
+        }, evaluatedWith: panel)], timeout: 10), .completed,
+            "Collapsed and expanded native photo grids must both use three columns")
     }
 }

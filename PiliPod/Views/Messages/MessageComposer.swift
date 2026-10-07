@@ -108,11 +108,7 @@ struct MessageComposer: View {
     }
 
     var photoPanel: some View {
-            PhotosPicker(selection: $model.photoSelections, maxSelectionCount: 50, selectionBehavior: .continuous, matching: .images,
-                preferredItemEncoding: .compatible) { EmptyView() }
-                .photosPickerStyle(.inline)
-                .photosPickerAccessoryVisibility(.hidden, edges: .all)
-                .disabled(model.isSending)
+        ConversationPhotoPicker(selection: $model.photoSelections, isDisabled: model.isSending)
     }
 
     var emotePanel: some View {
