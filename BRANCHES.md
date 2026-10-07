@@ -54,4 +54,8 @@ git push origin codex/integration
 
 `codex/private-message-native` 继续维护原生 SwiftUI 方案。原 PR #10 已合入 `codex/integration`；本次通过增量 Draft PR [#13](https://github.com/NZJ-Jimmy/PiliPod/pull/13) 提交，不复用已合并的 PR，也不把整合分支反向合回功能分支。
 
-本次修复照片面板收起/展开时的网格列数切换，以及查看历史再回到底部后键盘/面板不再抬起消息的问题。新增三列网格和底部跟随的界面回归验证。验证状态以当前功能分支 Actions 和增量 PR 为准；未声称已通过测试或完成真机验证。
+本次修复照片面板收起/展开时的网格列数切换，以及查看历史再回到底部后键盘/面板不再抬起消息的问题。照片面板收起、展开和再次收起均保持三列；回到底部后恢复键盘与面板的底部跟随，浏览历史时保留当前位置。
+
+代码提交 `5e0b56b56d0d20a2c8007f4e79c3df0df609098e` 的 [Actions #37531663469](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37531663469) 已成功：29 项单元测试、6 项私信 UI 测试全部通过，Release 未签名测试 IPA 已归档并上传。下载产物的 SHA256 已与工作流校验文件核对一致；尚未真机验证。后续仅更新此记录的提交不改变上述已验证代码。
+
+增量 PR #13 保持 Draft，尚未合入整合分支；当前与整合分支的 `BRANCHES.md` 有记录冲突，准备组合测试时应在整合分支处理，不能把整合分支反向合回功能分支。
