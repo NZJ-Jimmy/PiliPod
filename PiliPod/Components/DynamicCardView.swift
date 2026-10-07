@@ -9,6 +9,13 @@ struct DynamicCardView: View {
     let onCommentTap: (UserSpaceDynamicItem.CommentTarget) -> Void
     var showsFullTextByDefault = false
     var onTapDetail: (() -> Void)? = nil
+    var videoSourcePrefix = "dynamicFeed"
+    var onPreviewTap: ((UserSpaceDynamicItem.PreviewCard) -> Void)? = nil
+    var transitionNamespace: Namespace.ID? = nil
+
+    static func videoSourceID(prefix: String, itemID: String, bvid: String) -> String {
+        "\(prefix).\(itemID).\(bvid)"
+    }
 
     @Environment(\.openURL) private var openURL
     @State private var showsFullText = false
@@ -19,7 +26,11 @@ struct DynamicCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             authorHeader
-            if !item.text.isEmpty { textContent }
+            if !item.text.isEmpty {
+                textContent
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("\(videoSourcePrefix).\(item.id).text")
+            }
             imageGrid
             if let video = item.video { videoPreview(video) }
             if let live = item.live { livePreview(live) }
@@ -36,7 +47,12 @@ struct DynamicCardView: View {
         .onAppear { if showsFullTextByDefault { showsFullText = true; showsOriginalFullText = true } }
         .fullScreenCover(isPresented: Binding(get: { selectedImageURL != nil }, set: { if !$0 { selectedImageURL = nil } })) {
             if let url = selectedImageURL {
-                FullscreenImageViewer(imageURL: url, onDismiss: { selectedImageURL = nil })
+                if let transitionNamespace {
+                    FullscreenImageViewer(imageURL: url, onDismiss: { selectedImageURL = nil })
+                        .navigationTransition(.zoom(sourceID: "\(videoSourcePrefix).\(item.id)", in: transitionNamespace))
+                } else {
+                    FullscreenImageViewer(imageURL: url, onDismiss: { selectedImageURL = nil })
+                }
             }
         }
         .sheet(isPresented: Binding(get: { selectedWebURL != nil }, set: { if !$0 { selectedWebURL = nil } })) {
@@ -156,6 +172,7 @@ struct DynamicCardView: View {
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(Self.videoSourceID(prefix: videoSourcePrefix, itemID: item.id, bvid: video.bvid ?? ""))
     }
 
     private func livePreview(_ live: UserSpaceDynamicItem.Live) -> some View {
@@ -166,10 +183,14 @@ struct DynamicCardView: View {
     }
 
     private func genericPreview(_ preview: UserSpaceDynamicItem.PreviewCard) -> some View {
-        Button { if let link = preview.link, let url = URL(string: link) { openURL(url) } } label: {
+        Button {
+            if let onPreviewTap { onPreviewTap(preview) }
+            else if let link = preview.link, let url = URL(string: link) { openURL(url) }
+        } label: {
             previewRow(title: preview.title, subtitle: preview.subtitle ?? "", cover: preview.coverURL, badge: nil)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("\(videoSourcePrefix).\(item.id).preview")
         .disabled(preview.link == nil)
     }
 

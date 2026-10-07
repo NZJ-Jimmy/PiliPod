@@ -72,6 +72,8 @@ struct PiliPodApp: App {
                 VideoDetailGestureTestRoot()
             } else if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
                 LibraryLayoutFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("-dynamic-feed-ui-testing") {
+                DynamicView(testViewModel: DynamicFeedUITestFixture.makeModel(), testAccountMID: 42)
             } else {
                 MainTabView()
             }

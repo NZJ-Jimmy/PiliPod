@@ -195,10 +195,11 @@ struct VideoDetailPage: View {
     let video: VideoItem
     let namespace: Namespace.ID
     let onBack: () -> Void
+    let usesNativeZoomTransition: Bool
     private let maxHorizontalSeekOffset: TimeInterval = 50
     private let verticalBrightnessDragSensitivity: Double = 2.5
-    // Keep this strip completely free of SwiftUI drag recognizers so UIKit's
-    // interactive pop gesture has an uncontested edge-pan area.
+    // Player seeking and the content pager exclude this strip; it belongs
+    // to navigation, including the edge-only SwiftUI dismissal fallback.
     private let nonFullscreenBackSwipeReservedWidth: CGFloat = 32
 
     private var heroID: String { "videoHero.\(video.bvid)" }
@@ -325,10 +326,11 @@ struct VideoDetailPage: View {
         return min(size.width / aspectRatio, size.width * (4.0 / 3.0))
     }
 
-    init(video: VideoItem, namespace: Namespace.ID, onBack: @escaping () -> Void) {
+    init(video: VideoItem, namespace: Namespace.ID, usesNativeZoomTransition: Bool = false, onBack: @escaping () -> Void) {
         self.video = video
         self.namespace = namespace
         self.onBack = onBack
+        self.usesNativeZoomTransition = usesNativeZoomTransition
         _viewModel = State(initialValue: VideoDetailViewModel(
             bvid: video.bvid,
             cid: video.cid ?? 0,
@@ -757,7 +759,26 @@ struct VideoDetailPage: View {
                     Color(.systemBackground).ignoresSafeArea(edges: .bottom)
                 }
             }
-            .background(NavigationPopGestureEnabler())
+            .background {
+                if !usesNativeZoomTransition { NavigationPopGestureEnabler() }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                    .onEnded { value in
+                        guard !usesNativeZoomTransition, !isFullscreen, !isClosing,
+                              value.startLocation.x <= nonFullscreenBackSwipeReservedWidth,
+                              value.translation.width > max(80, geo.size.width * 0.2),
+                              value.translation.width > abs(value.translation.height) * 2
+                        else { return }
+                        // Some SwiftUI hosts consume UIKit's edge recognizer.
+                        // Keep an edge-only fallback and let NavigationStack
+                        // animate the same dismissal as the back button.
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            requestPageDismissal()
+                        }
+                    },
+                including: usesNativeZoomTransition ? .subviews : .all
+            )
             .allowsHitTesting(!isClosing)
         }
 #if canImport(UIKit)

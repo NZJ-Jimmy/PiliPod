@@ -1240,38 +1240,56 @@ class BiliAPI {
 
     // MARK: - 获取全部动态（Web）
 
-    func fetchAllDynamics(offset: String? = nil) async throws -> UserSpaceDynamicPageResult {
-        let account = LoginSession.shared.account(for: .main)
-        var components = URLComponents(string: "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all")
-        var queryItems = [
-            URLQueryItem(name: "platform", value: "web"),
-            URLQueryItem(name: "web_location", value: "333.1387"),
-            URLQueryItem(name: "features", value: "itemOpusStyle,listOnlyfans,opusBigCover,onlyfansVote,forwardListHidden,decorationCard,commentsNewVersion,onlyfansAssetsV2,ugcDelete,onlyfansQaCard")
-        ]
-        if let offset, !offset.isEmpty {
-            queryItems.append(URLQueryItem(name: "offset", value: offset))
-        }
-        components?.queryItems = queryItems
+    func fetchAllDynamics(offset: String? = nil, category: DynamicCategory = .all) async throws -> UserSpaceDynamicPageResult {
+        try await fetchFilteredDynamics(filter: DynamicFeedFilter(category: category), offset: offset)
+    }
 
-        guard let url = components?.url else { throw APIError.invalidURL }
-        let signedURL = try await BiliWbiSigner.shared.sign(url: url)
-        var request = makeRequest(account: account, url: signedURL)
+    func fetchFilteredDynamics(filter: DynamicFeedFilter, author: DynamicFeedAuthor? = nil, offset: String? = nil) async throws -> UserSpaceDynamicPageResult {
+        // feed/all 与 opus/feed/space 均支持 Cookie 请求；不额外请求 WBI 导航密钥。
+        let account = LoginSession.shared.account(for: .main)
+        var request = makeRequest(account: account, url: filter.requestURL(offset: offset))
+        request.timeoutInterval = 12
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
-        request.setValue("https://www.bilibili.com", forHTTPHeaderField: "Referer")
-        request.setValue("web", forHTTPHeaderField: "Origin")
+        request.setValue("https://t.bilibili.com/", forHTTPHeaderField: "Referer")
+        request.setValue("https://www.bilibili.com", forHTTPHeaderField: "Origin")
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) else {
-            throw APIError.requestFailed
-        }
+        guard let httpResponse = response as? HTTPURLResponse else { throw APIError.requestFailed }
+        guard (200 ... 299).contains(httpResponse.statusCode) else { throw APIError.responseError(httpResponse.statusCode) }
 
         let decoded = try JSONDecoder().decode(UserSpaceDynamicPage.self, from: data)
         guard decoded.code == 0 else {
             throw APIError.businessError(code: decoded.code, message: decoded.message)
         }
         guard let payload = decoded.data else { throw APIError.requestFailed }
-        let items = (payload.items ?? []).compactMap { UserSpaceDynamicItem.make(from: $0) }
+        let items: [UserSpaceDynamicItem]
+        if filter.authorMID != nil && filter.category == .article {
+            items = (payload.items ?? []).compactMap { UserSpaceDynamicItem.makeArticle(from: $0, author: author, mid: filter.authorMID!) }
+        } else {
+            items = (payload.items ?? []).compactMap { UserSpaceDynamicItem.make(from: $0) }
+        }
         return UserSpaceDynamicPageResult(items: items, hasMore: payload.hasMore ?? false, nextOffset: payload.offset)
+    }
+
+    // MARK: - 动态页常访问 UP 主
+
+    func fetchDynamicAuthors() async throws -> [DynamicFeedAuthor] {
+        guard let url = URL(string: "https://api.bilibili.com/x/polymer/web-dynamic/v1/portal?up_list_more=1&web_location=333.1365") else {
+            throw APIError.invalidURL
+        }
+        var request = makeRequest(url: url)
+        request.setValue("https://t.bilibili.com/", forHTTPHeaderField: "Referer")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let response = response as? HTTPURLResponse, (200 ... 299).contains(response.statusCode) else {
+            throw APIError.requestFailed
+        }
+        let decoded = try JSONDecoder().decode(DynamicPortalResponse.self, from: data)
+        guard decoded.code == 0 else {
+            throw APIError.businessError(code: decoded.code, message: decoded.message)
+        }
+        guard let payload = decoded.data else { throw APIError.requestFailed }
+        var seen = Set<Int>()
+        return (payload.upList?.items ?? []).filter { $0.mid > 0 && seen.insert($0.mid).inserted }
     }
 
     // MARK: - 获取个人空间投稿
@@ -2862,8 +2880,10 @@ enum APIError: LocalizedError {
         case .invalidURL:
             return "无效的 URL"
         case let .responseError(code):
+            if code == 412 { return "B站暂时限制了请求，请稍后重试（HTTP 412）" }
             return "API 错误: \(code)"
         case let .businessError(code, message):
+            if code == -352 { return "B站风控校验失败，请稍后重试（-352）" }
             if let message, !message.isEmpty {
                 return message
             }
