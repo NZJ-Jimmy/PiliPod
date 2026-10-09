@@ -68,3 +68,7 @@ git push origin codex/integration
 - 底部使用系统 search-role Tab；点击展开底部输入栏，沿用搜索联想、历史、综合/视频/用户结果与详情导航。
 - 新个人 fork Draft PR 目标为 `codex/integration`；尚未整合。依赖已有 #1、#9、#10、#13。
 - 验证：本地 `git diff --check` 通过；Windows 不具备 Xcode。新增 `Verify bottom search and My messages` 运行单元测试、入口位置及搜索展开/键盘提交 UI 回归并导出截图；Actions 和真机结果待确认。
+
+- PR：[#14](https://github.com/NZJ-Jimmy/PiliPod/pull/14)，Draft，目标为 `codex/integration`。
+- 首轮验证提交 `9c87188`：[Actions 37908647010](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37908647010)。编译、单元测试、私信按钮位置及消息/设置导航通过；搜索展开及输入通过。键盘提交回归失败，截图确认模拟器首次键盘 QuickPath 引导遮住搜索键；测试先关闭引导并明确检查 Search 键可点击后重跑，产品代码未修改。
+- 整合预检冲突：`BRANCHES.md`、`PiliPodApp.swift`、`HomeView.swift`、`MainTabView.swift`。准备组合测试时在整合分支处理，保留多账号与动态筛选以及各 Debug 入口。

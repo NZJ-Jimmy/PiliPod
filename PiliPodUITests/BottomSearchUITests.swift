@@ -22,9 +22,17 @@ final class BottomSearchUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(field.frame.midY, app.frame.midY)
+        // A fresh simulator can cover the keyboard with the QuickPath tutorial.
+        for title in ["Continue", "继续"] {
+            let tutorialButton = app.buttons[title]
+            if tutorialButton.exists { tutorialButton.tap() }
+        }
         field.typeText("pilipod")
         capture(app, name: "底部展开输入栏")
-        app.keyboards.buttons["搜索"].tap()
+        let submit = app.keyboards.buttons["Search"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
+        XCTAssertTrue(submit.isHittable)
+        submit.tap()
         XCTAssertTrue(app.staticTexts["综合"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["视频"].exists)
         XCTAssertTrue(app.staticTexts["用户"].exists)
