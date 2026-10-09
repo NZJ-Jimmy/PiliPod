@@ -55,12 +55,12 @@ struct MainTabView: View {
                         )
                     )
                 }
+                .searchable(text: $searchText, prompt: "搜索视频")
+                .searchFocused($searchFieldFocused)
+                .onSubmit(of: .search) { searchSubmissionID += 1 }
             }
         }
-        .searchable(text: $searchText, prompt: "搜索视频")
-        .searchFocused($searchFieldFocused)
         .tabViewSearchActivation(.searchTabSelection)
-        .onSubmit(of: .search) { searchSubmissionID += 1 }
         .toolbar(.visible, for: .tabBar)
         .task {
             await homeViewModel.loadUserIfNeeded()
@@ -89,7 +89,7 @@ struct MainTabView: View {
             }
         }
         .onChange(of: selectedTab) { newTab in
-            if newTab != .search { searchFieldFocused = false }
+            searchFieldFocused = newTab == .search
             guard newTab == .mine else { return }
             Task {
                 await homeViewModel.refreshUnreadMessageCountIfNeeded()

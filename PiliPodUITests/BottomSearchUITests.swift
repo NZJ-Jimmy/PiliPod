@@ -56,6 +56,7 @@ final class BottomSearchUITests: XCTestCase {
         let settings = app.buttons["my.settings"]
         XCTAssertTrue(messages.waitForExistence(timeout: 5))
         XCTAssertTrue(settings.exists)
+        XCTAssertFalse(app.searchFields.firstMatch.exists)
         XCTAssertEqual(messages.frame.midY, settings.frame.midY, accuracy: 2)
         XCTAssertLessThan(messages.frame.maxX, settings.frame.minX)
         capture(app, name: "我的页私信与设置并列")

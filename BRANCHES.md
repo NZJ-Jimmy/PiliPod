@@ -72,3 +72,5 @@ git push origin codex/integration
 - PR：[#14](https://github.com/NZJ-Jimmy/PiliPod/pull/14)，Draft，目标为 `codex/integration`。
 - 首轮验证提交 `9c87188`：[Actions 37908647010](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37908647010)。编译、单元测试、私信按钮位置及消息/设置导航通过；搜索展开及输入通过。键盘提交回归失败，截图确认模拟器首次键盘 QuickPath 引导遮住搜索键；测试先关闭引导并明确检查 Search 键可点击后重跑，产品代码未修改。
 - 整合预检冲突：`BRANCHES.md`、`PiliPodApp.swift`、`HomeView.swift`、`MainTabView.swift`。准备组合测试时在整合分支处理，保留多账号与动态筛选以及各 Debug 入口。
+
+- 首轮截图额外发现：TabView 全局 searchable 在「我的」页顶部显示了多余搜索栏；现限定在搜索 Tab 的 NavigationStack 上，搜索 Tab 选中时请求聚焦，并新增我的页不存在搜索栏的断言。首轮 39 项 Swift Testing 单元测试通过；后续验证以最新提交为准。
