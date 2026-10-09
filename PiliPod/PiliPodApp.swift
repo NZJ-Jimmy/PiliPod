@@ -65,7 +65,15 @@ struct PiliPodApp: App {
 
     var body: some Scene {
         WindowGroup {
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
+                LibraryLayoutFixtureView()
+            } else {
+                MainTabView()
+            }
+#else
             MainTabView()
+#endif
         }
     }
 }
