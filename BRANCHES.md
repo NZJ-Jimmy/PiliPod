@@ -74,3 +74,5 @@ git push origin codex/integration
 - 整合预检冲突：`BRANCHES.md`、`PiliPodApp.swift`、`HomeView.swift`、`MainTabView.swift`。准备组合测试时在整合分支处理，保留多账号与动态筛选以及各 Debug 入口。
 
 - 首轮截图额外发现：TabView 全局 searchable 在「我的」页顶部显示了多余搜索栏；现限定在搜索 Tab 的 NavigationStack 上，搜索 Tab 选中时请求聚焦，并新增我的页不存在搜索栏的断言。首轮 39 项 Swift Testing 单元测试通过；后续验证以最新提交为准。
+
+- 最终验证：代码提交 `75475cfbe891ff96f41204f3a4182e532b006acd` 的 [Actions 37910445970](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37910445970) 成功，iPhone 17 Pro 模拟器编译、39 项单元测试、2 项 UI 回归全部通过。截图确认我的页仅私信与设置并列、底部独立搜索按钮、展开键盘输入与提交结果；我的页无额外搜索栏。之后仅补充记录，不改变已验证代码。未整合，真实账号私信及真机尚未验证。
