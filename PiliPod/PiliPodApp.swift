@@ -66,7 +66,9 @@ struct PiliPodApp: App {
     var body: some Scene {
         WindowGroup {
 #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
+            if ConversationUITestFixture.enabled {
+                ConversationUITestHost()
+            } else if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
                 LibraryLayoutFixtureView()
             } else {
                 MainTabView()
