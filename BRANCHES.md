@@ -59,3 +59,12 @@ git push origin codex/integration
 代码提交 `5e0b56b56d0d20a2c8007f4e79c3df0df609098e` 的 [Actions #37531663469](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37531663469) 已成功：29 项单元测试、6 项私信 UI 测试全部通过，Release 未签名测试 IPA 已归档并上传。下载产物的 SHA256 已与工作流校验文件核对一致；尚未真机验证。后续仅更新此记录的提交不改变上述已验证代码。
 
 增量 PR #13 保持 Draft，尚未合入整合分支；当前与整合分支的 `BRANCHES.md` 有记录冲突，准备组合测试时应在整合分支处理，不能把整合分支反向合回功能分支。
+
+## 底部搜索与我的页私信入口（2026-10-09）
+
+- 新分支：`codex/bottom-search-my-messages`；独立 worktree：`bottom-search-my-messages/PiliPod`。
+- 从已同步的 `origin/main`（`72ea3b6`）创建，merge `codex/my-page-layout`（含 `codex/my-library`）及 `codex/private-message-native`；没有从整合分支开发。保留两个依赖的 Debug 测试入口。
+- 私信入口迁移到「我的」页设置左侧，保留未读角标和原生消息导航；首页移除顶部搜索与消息入口。
+- 底部使用系统 search-role Tab；点击展开底部输入栏，沿用搜索联想、历史、综合/视频/用户结果与详情导航。
+- 新个人 fork Draft PR 目标为 `codex/integration`；尚未整合。依赖已有 #1、#9、#10、#13。
+- 验证：本地 `git diff --check` 通过；Windows 不具备 Xcode。新增 `Verify bottom search and My messages` 运行单元测试、入口位置及搜索展开/键盘提交 UI 回归并导出截图；Actions 和真机结果待确认。

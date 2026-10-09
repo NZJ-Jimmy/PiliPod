@@ -20,9 +20,9 @@ struct SearchView: View {
         var id: String { rawValue }
     }
 
-    @Environment(\.dismiss) private var dismiss
-    @State private var isSearchFieldFocused = false
-    @State private var searchText = ""
+    var searchSubmissionID = 0
+    @Binding var searchText: String
+    @Binding var isSearchFieldFocused: Bool
     @State private var searchSuggestions: [SearchSuggestItem] = []
     @State private var isLoadingSuggestions = false
     @State private var suggestionRequestID = UUID()
@@ -35,7 +35,6 @@ struct SearchView: View {
     @State private var searchModules: [SearchComprehensiveModule] = []
     @State private var isSearching = false
     @State private var searchErrorMessage: String?
-    @State private var didPerformInitialAutoFocus = false
     @State private var videoResults: [SearchComprehensiveVideo] = []
     @State private var userResults: [SearchComprehensiveUser] = []
     @State private var videoCurrentPage = 0
@@ -57,49 +56,6 @@ struct SearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 40, height: 40)
-                }
-                .foregroundStyle(.primary)
-                .glassEffect(.regular.interactive(), in: .circle)
-
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-
-                    SearchTextField(
-                        text: $searchText,
-                        isFocused: $isSearchFieldFocused,
-                        onSubmit: { _ in submitSearch() }
-                    )
-                    .frame(maxWidth: .infinity)
-
-                    if !searchText.isEmpty {
-                        Button {
-                            clearSearch()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .frame(height: 40)
-                .glassEffect(
-                    .regular.interactive(),
-                    in: .capsule
-                )
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-
             ZStack(alignment: .top) {
                 if isShowingSearchResults {
                     VStack(spacing: 0) {
@@ -122,10 +78,10 @@ struct SearchView: View {
             }
         }
         .background(Color(.systemBackground))
-        .background(NavigationPopGestureEnabler())
         .navigationBarBackButtonHidden(true)
         .navigationBarHidden(true)
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(.visible, for: .tabBar)
+        .onChange(of: searchSubmissionID) { _, _ in submitSearch() }
         .navigationDestination(item: $selectedVideo) { video in
             VideoDetailPage(
                 video: video,
@@ -141,13 +97,6 @@ struct SearchView: View {
                 mid: route.mid,
                 onBack: { selectedUserSpaceRoute = nil }
             )
-        }
-        .onAppear {
-            guard !didPerformInitialAutoFocus else { return }
-            didPerformInitialAutoFocus = true
-            Task {
-                await focusSearchField()
-            }
         }
         .task {
             await loadDiscovery()
@@ -863,12 +812,6 @@ struct SearchView: View {
         SearchHistoryStore.save(searchHistory)
     }
 
-    @MainActor
-    private func focusSearchField() async {
-        try? await Task.sleep(for: .milliseconds(150))
-        isSearchFieldFocused = true
-    }
-
     @ViewBuilder
     private func suggestionText(for item: SearchSuggestItem) -> some View {
         let source = item.name.isEmpty ? item.value : item.name
@@ -1122,6 +1065,6 @@ private struct FlowLayoutItem {
 
 #Preview {
     NavigationStack {
-        SearchView()
+        SearchView(searchText: .constant(""), isSearchFieldFocused: .constant(false))
     }
 }

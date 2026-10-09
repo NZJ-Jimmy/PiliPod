@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MyView: View {
     var isActive = true
+    @Bindable var messageViewModel: HomeViewModel
     @StateObject private var viewModel = MyViewModel()
     @ObservedObject private var loginSession = LoginSession.shared
     @State private var showLoginSheet = false
@@ -34,6 +35,29 @@ struct MyView: View {
                     HStack {
                         Spacer()
                         NavigationLink {
+                            MessageView(viewModel: messageViewModel)
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell.fill")
+                                    .frame(width: 20, height: 20)
+                                    .padding(10)
+                                if messageViewModel.unreadMessageCount > 0 {
+                                    Text(messageViewModel.unreadMessageCount > 99 ? "99+" : String(messageViewModel.unreadMessageCount))
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 5)
+                                        .frame(minWidth: 17, minHeight: 17)
+                                        .background(.red, in: Capsule())
+                                        .offset(x: 4, y: -4)
+                                }
+                            }
+                        }
+                        .tint(.primary)
+                        .accessibilityLabel("私信")
+                        .accessibilityValue(messageViewModel.unreadMessageCount > 0 ? "未读消息 \(messageViewModel.unreadMessageCount) 条" : "无未读消息")
+                        .accessibilityIdentifier("my.messages")
+                        .glassEffect(.regular.interactive(), in: .circle)
+                        NavigationLink {
                             SettingsView()
                         } label: {
                             Image(systemName: "gear")
@@ -41,6 +65,7 @@ struct MyView: View {
                                 .padding(10)
                         }
                         .tint(.primary)
+                        .accessibilityLabel("设置")
                         .accessibilityIdentifier("my.settings")
                         .glassEffect(.regular.interactive(), in: .circle)
                     }
@@ -64,6 +89,7 @@ struct MyView: View {
             }
             .task {
                 await viewModel.loadUser()
+                await messageViewModel.refreshUnreadMessageCountIfNeeded()
             }
             .onAppear {
                 if !appliedDefaults {
@@ -343,7 +369,7 @@ struct MyView: View {
 }
 
 #Preview {
-    MyView()
+    MyView(messageViewModel: HomeViewModel())
 }
 
 private struct MyFollowingRoute: Identifiable, Hashable {

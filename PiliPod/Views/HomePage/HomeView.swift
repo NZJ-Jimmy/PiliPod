@@ -33,8 +33,6 @@ struct HomeView: View {
 
     @State private var selectedTab: HomeTab = .recommended
     @State private var selectedVideo: VideoItem?
-    @State private var isSearchViewPresented = false
-    @State private var isMessageViewPresented = false
     @State private var liveHomeViewModel = LiveHomeViewModel()
     @Namespace private var videoHeroNamespace
     @Bindable var viewModel: HomeViewModel
@@ -57,65 +55,6 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 // 顶部区域
                 VStack(spacing: 14) {
-                    // 第一行
-                    HStack(spacing: 12) {
-                        // 搜索框
-                        Button {
-                            isSearchViewPresented = true
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-
-                                Text("搜索视频")
-                                    .foregroundStyle(.secondary)
-
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, 14)
-                            .frame(height: 40)
-                            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .glassEffect(
-                            .regular.interactive(),
-                            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        )
-
-                        // 消息按钮
-                        Button {
-                            isMessageViewPresented = true
-                        } label: {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: "bell.fill")
-                                    .font(.system(size: 18))
-                                    .frame(width: 40, height: 40)
-
-                                if viewModel.unreadMessageCount > 0 {
-                                    Text(unreadBadgeText)
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 5)
-                                        .frame(minWidth: 17, minHeight: 17)
-                                        .background(.red, in: Capsule())
-                                        .overlay {
-                                            Capsule()
-                                                .stroke(.regularMaterial, lineWidth: 1)
-                                        }
-                                        .offset(x: 4, y: -4)
-                                }
-                            }
-                        }
-                        .foregroundStyle(.primary)
-                        .glassEffect(
-                            .regular.interactive(),
-                            in: .circle
-                        )
-
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-
                     // 分类栏
                     tabBar
                 }
@@ -158,12 +97,7 @@ struct HomeView: View {
                     )
                 }
             }
-            .navigationDestination(isPresented: $isSearchViewPresented) {
-                SearchView()
-            }
-            .navigationDestination(isPresented: $isMessageViewPresented) {
-                MessageView(viewModel: viewModel)
-            }
+
         }
         .task {
             await viewModel.refreshUnreadMessageCountIfNeeded()
@@ -184,7 +118,6 @@ struct HomeView: View {
             case let .video(video):
                 selectedTab = .recommended
                 selectedVideo = nil
-                isSearchViewPresented = false
                 DispatchQueue.main.async {
                     selectedVideo = video
                 }
@@ -192,10 +125,6 @@ struct HomeView: View {
                 selectedTab = .live
             }
         }
-    }
-
-    private var unreadBadgeText: String {
-        viewModel.unreadMessageCount > 99 ? "99+" : String(viewModel.unreadMessageCount)
     }
 
     private var tabBar: some View {
