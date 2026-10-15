@@ -11,6 +11,9 @@ import UIKit
 struct MainTabView: View {
     @State private var homeViewModel = HomeViewModel()
     @State private var selectedTab: MainTab = .home
+    @State private var searchText = ""
+    @State private var searchSubmissionID = 0
+    @FocusState private var searchFieldFocused: Bool
     @State private var profileTabAvatar: UIImage?
     @ObservedObject private var loginSession = LoginSession.shared
 
@@ -18,32 +21,46 @@ struct MainTabView: View {
         case home
         case dynamic
         case mine
+        case search
     }
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            HomeView(viewModel: homeViewModel)
-                .tag(MainTab.home)
-                .tabItem {
-                    Image(systemName: "house.fill")
-                    Text("首页")
-                }
+            Tab("首页", systemImage: "house.fill", value: MainTab.home) {
+                HomeView(viewModel: homeViewModel)
+            }
 
-            DynamicView().id(loginSession.selectedID(for: .main))
-                .tag(MainTab.dynamic)
-                .tabItem {
-                    Image("DynamicIcon")
-                        .renderingMode(.template)
-                    Text("动态")
-                }
+            Tab(value: MainTab.dynamic) {
+                DynamicView().id(loginSession.selectedID(for: .main))
+            } label: {
+                Image("DynamicIcon").renderingMode(.template)
+                Text("动态")
+            }
 
-            MyView(isActive: selectedTab == .mine)
-                .tag(MainTab.mine)
-                .tabItem {
-                    profileTabIcon
-                    Text("我的")
+            Tab(value: MainTab.mine) {
+                MyView(isActive: selectedTab == .mine, messageViewModel: homeViewModel)
+            } label: {
+                profileTabIcon
+                Text("我的")
+            }
+
+            Tab("搜索", systemImage: "magnifyingglass", value: MainTab.search, role: .search) {
+                NavigationStack {
+                    SearchView(
+                        searchSubmissionID: searchSubmissionID,
+                        searchText: $searchText,
+                        isSearchFieldFocused: Binding(
+                            get: { searchFieldFocused },
+                            set: { searchFieldFocused = $0 }
+                        )
+                    )
                 }
+                .searchable(text: $searchText, prompt: "搜索视频")
+                .searchFocused($searchFieldFocused)
+                .onSubmit(of: .search) { searchSubmissionID += 1 }
+            }
         }
+        .tabViewSearchActivation(.searchTabSelection)
         .toolbar(.visible, for: .tabBar)
         .task(id: loginSession.selectedID(for: .main)) {
             homeViewModel.userFace = nil
@@ -65,7 +82,8 @@ struct MainTabView: View {
         }
 
         .onChange(of: selectedTab) { newTab in
-            guard newTab == .home else { return }
+            searchFieldFocused = newTab == .search
+            guard newTab == .mine else { return }
             Task {
                 await homeViewModel.refreshUnreadMessageCountIfNeeded()
             }

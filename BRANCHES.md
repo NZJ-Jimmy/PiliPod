@@ -82,3 +82,24 @@ git push origin codex/integration
 PR #12（动态 UP 主与内容类别筛选，head a882bbd）及 #13（原生私信三列选图与底部跟随修复，head 965b3eb）已合入 codex/integration。以上功能章节中的未整合/Draft 描述是当时的历史状态，以本节及 GitHub 当前状态为准。
 
 整合冲突处理保留所有 Debug 测试入口，并使动态筛选 API 使用主账号快照，保留新筛选参数、请求头、12 秒超时与错误处理。两项功能独立验证均已通过，新的组合验证待 Actions 结果确认；未修改 main 或上游，原功能分支保留。
+
+## 底部搜索与我的页私信入口（2026-10-09）
+
+- 新分支：`codex/bottom-search-my-messages`；独立 worktree：`bottom-search-my-messages/PiliPod`。
+- 从已同步的 `origin/main`（`72ea3b6`）创建，merge `codex/my-page-layout`（含 `codex/my-library`）及 `codex/private-message-native`；没有从整合分支开发。保留两个依赖的 Debug 测试入口。
+- 私信入口迁移到「我的」页设置左侧，保留未读角标和原生消息导航；首页移除顶部搜索与消息入口。
+- 底部使用系统 search-role Tab；点击展开底部输入栏，沿用搜索联想、历史、综合/视频/用户结果与详情导航。
+- 新个人 fork Draft PR 目标为 `codex/integration`；尚未整合。依赖已有 #1、#9、#10、#13。
+- 验证：本地 `git diff --check` 通过；Windows 不具备 Xcode。新增 `Verify bottom search and My messages` 运行单元测试、入口位置及搜索展开/键盘提交 UI 回归并导出截图；Actions 和真机结果待确认。
+
+- PR：[#14](https://github.com/NZJ-Jimmy/PiliPod/pull/14)，Draft，目标为 `codex/integration`。
+- 首轮验证提交 `9c87188`：[Actions 37908647010](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37908647010)。编译、单元测试、私信按钮位置及消息/设置导航通过；搜索展开及输入通过。键盘提交回归失败，截图确认模拟器首次键盘 QuickPath 引导遮住搜索键；测试先关闭引导并明确检查 Search 键可点击后重跑，产品代码未修改。
+- 整合预检冲突：`BRANCHES.md`、`PiliPodApp.swift`、`HomeView.swift`、`MainTabView.swift`。准备组合测试时在整合分支处理，保留多账号与动态筛选以及各 Debug 入口。
+
+- 首轮截图额外发现：TabView 全局 searchable 在「我的」页顶部显示了多余搜索栏；现限定在搜索 Tab 的 NavigationStack 上，搜索 Tab 选中时请求聚焦，并新增我的页不存在搜索栏的断言。首轮 39 项 Swift Testing 单元测试通过；后续验证以最新提交为准。
+
+- 最终验证：代码提交 `75475cfbe891ff96f41204f3a4182e532b006acd` 的 [Actions 37910445970](https://github.com/NZJ-Jimmy/PiliPod/actions/runs/37910445970) 成功，iPhone 17 Pro 模拟器编译、39 项单元测试、2 项 UI 回归全部通过。截图确认我的页仅私信与设置并列、底部独立搜索按钮、展开键盘输入与提交结果；我的页无额外搜索栏。之后仅补充记录，不改变已验证代码。未整合，真实账号私信及真机尚未验证。
+
+## ????????????2026-10-15?
+
+??????? PR #14?head `776d50e`?? merge ?? `codex/integration`??????????????????????????????????? Debug ???????????????????????????????? worktree ???main ???????????????? UI ???Release ????? IPA ? `Verify integration and build test IPA` ?????????
