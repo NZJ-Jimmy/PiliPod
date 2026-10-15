@@ -26,15 +26,14 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
     }
 
     private let commandCenter = MPRemoteCommandCenter.shared()
-    private let audioEngine = AVAudioEngine()
+    private let audioSession = PlaybackAudioSessionWorker()
     private var commandTargets: [(MPRemoteCommand, Any)] = []
     private var artworkLoadTask: Task<Void, Never>?
     private var currentArtworkURL: URL?
     private var currentArtworkImage: UIImage?
     private var lastPlaybackInfo: PlaybackInfo?
     private var didRegisterCommands = false
-    private var isAudioSessionActive = false
-    private var silenceNode: AVAudioSourceNode?
+    private var isActive = false
     private var notificationObservers: [NSObjectProtocol] = []
 
     private var onPlay: (() -> Void)?
@@ -52,29 +51,21 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
     }
 
     func activate() {
-        do {
-            try ensurePlaybackSessionReady(reason: "activate")
-            installAudioSessionObserversIfNeeded()
-            registerRemoteCommandsIfNeeded()
-        } catch {
-            ErrorLogService.record(error, context: "激活音频会话")
-            print("[AudioSession] Failed to activate audio session: \(error.localizedDescription)")
-        }
+        isActive = true
+        audioSession.activate()
+        UIApplication.shared.beginReceivingRemoteControlEvents()
+        installAudioSessionObserversIfNeeded()
+        registerRemoteCommandsIfNeeded()
     }
 
     func deactivate() {
+        isActive = false
         teardown()
-
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
-            isAudioSessionActive = false
-        } catch {
-            ErrorLogService.record(error, context: "停用音频会话")
-            print("[AudioSession] Failed to deactivate audio session: \(error.localizedDescription)")
-        }
+        audioSession.deactivate()
     }
 
     func updateNowPlaying(info: PlaybackInfo) {
+        guard isActive else { return }
         let normalizedInfo = PlaybackInfo(
             title: info.title,
             artist: info.artist,
@@ -89,24 +80,13 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
 
         lastPlaybackInfo = normalizedInfo
 
-        let session = AVAudioSession.sharedInstance()
-
         if currentArtworkURL != normalizedInfo.artworkURL {
             currentArtworkURL = normalizedInfo.artworkURL
             currentArtworkImage = nil
             loadArtworkIfNeeded(from: normalizedInfo.artworkURL)
         }
 
-        if normalizedInfo.isPlaying {
-            do {
-                try ensurePlaybackSessionReady(reason: "updateNowPlaying.playing")
-            } catch {
-                ErrorLogService.record(error, context: "刷新播放音频会话")
-                print("[AudioSession] Failed to refresh playback session while playing: \(error.localizedDescription)")
-            }
-        } else {
-            suspendPlaybackSessionIfNeeded(reason: "updateNowPlaying.paused")
-        }
+        audioSession.setPlaying(normalizedInfo.isPlaying)
 
         commandCenter.changePlaybackPositionCommand.isEnabled = normalizedInfo.supportsSeeking && !normalizedInfo.isLiveStream
         publishNowPlaying(info: normalizedInfo, artwork: currentArtworkImage)
@@ -115,7 +95,6 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
     private func teardown() {
         artworkLoadTask?.cancel()
         artworkLoadTask = nil
-        audioEngine.stop()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         UIApplication.shared.endReceivingRemoteControlEvents()
         unregisterRemoteCommands()
@@ -237,52 +216,6 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
 
-    private func ensurePlaybackSessionReady(reason: String) throws {
-        let session = AVAudioSession.sharedInstance()
-        if !isAudioSessionActive {
-            try session.setCategory(.playback, mode: .moviePlayback)
-            try session.setActive(true)
-            isAudioSessionActive = true
-        }
-        try startSilentAudioEngineIfNeeded()
-        UIApplication.shared.beginReceivingRemoteControlEvents()
-    }
-
-    private func suspendPlaybackSessionIfNeeded(reason: String) {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            print("[AudioSession][SessionSuspended] reason=\(reason) engineRunning=\(audioEngine.isRunning)")
-        }
-    }
-
-    private func startSilentAudioEngineIfNeeded() throws {
-        if silenceNode == nil {
-            let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)
-            let sourceNode = AVAudioSourceNode { _, _, _, audioBufferList -> OSStatus in
-                let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
-                for buffer in buffers {
-                    guard let pointer = buffer.mData else { continue }
-                    memset(pointer, 0, Int(buffer.mDataByteSize))
-                }
-                return noErr
-            }
-
-            silenceNode = sourceNode
-            audioEngine.attach(sourceNode)
-
-            if let format {
-                audioEngine.connect(sourceNode, to: audioEngine.mainMixerNode, format: format)
-            } else {
-                audioEngine.connect(sourceNode, to: audioEngine.mainMixerNode, format: nil)
-            }
-        }
-
-        if !audioEngine.isRunning {
-            try audioEngine.start()
-            print("[AudioSession] Started silent audio engine")
-        }
-    }
-
     private func installAudioSessionObserversIfNeeded() {
         guard notificationObservers.isEmpty else { return }
 
@@ -301,13 +234,6 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
                 queue: .main
             ) { [weak self] _ in
                 self?.handleMediaServicesReset()
-            },
-            center.addObserver(
-                forName: .AVAudioEngineConfigurationChange,
-                object: audioEngine,
-                queue: .main
-            ) { [weak self] _ in
-                self?.handleAudioEngineConfigurationChange()
             }
         ]
     }
@@ -332,46 +258,22 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
         print("[AudioSession][Interruption] type=\(type.rawValue) lastPlaying=\(lastPlaybackInfo?.isPlaying.description ?? "nil")")
 
         if type == .began {
-            isAudioSessionActive = false
+            audioSession.interruptionBegan()
             return
         }
 
         guard type == .ended, let playbackInfo = lastPlaybackInfo, playbackInfo.isPlaying else { return }
 
-        do {
-            try ensurePlaybackSessionReady(reason: "interruptionEnded")
-            publishNowPlaying(info: playbackInfo, artwork: currentArtworkImage)
-        } catch {
-            ErrorLogService.record(error, context: "音频会话中断恢复")
-            print("[AudioSession] Failed to recover after interruption: \(error.localizedDescription)")
-        }
+        audioSession.interruptionEnded()
+        publishNowPlaying(info: playbackInfo, artwork: currentArtworkImage)
     }
 
     private func handleMediaServicesReset() {
 
         guard let playbackInfo = lastPlaybackInfo else { return }
-        isAudioSessionActive = false
-
-        do {
-            try ensurePlaybackSessionReady(reason: "mediaServicesReset")
-            registerRemoteCommandsIfNeeded()
-            publishNowPlaying(info: playbackInfo, artwork: currentArtworkImage)
-        } catch {
-            ErrorLogService.record(error, context: "媒体服务重置恢复")
-            print("[AudioSession] Failed to recover after media services reset: \(error.localizedDescription)")
-        }
-    }
-
-    private func handleAudioEngineConfigurationChange() {
-        guard let playbackInfo = lastPlaybackInfo, playbackInfo.isPlaying else { return }
-
-        do {
-            try ensurePlaybackSessionReady(reason: "audioEngineConfigurationChange")
-            publishNowPlaying(info: playbackInfo, artwork: currentArtworkImage)
-        } catch {
-            ErrorLogService.record(error, context: "音频引擎配置恢复")
-            print("[AudioSession] Failed to recover after audio engine configuration change: \(error.localizedDescription)")
-        }
+        audioSession.mediaServicesReset(isPlaying: playbackInfo.isPlaying)
+        registerRemoteCommandsIfNeeded()
+        publishNowPlaying(info: playbackInfo, artwork: currentArtworkImage)
     }
 
     private func loadArtworkIfNeeded(from url: URL?) {
@@ -392,6 +294,162 @@ final class VideoPlaybackAudioSessionManager: ObservableObject {
             if let playbackInfo = self.lastPlaybackInfo {
                 self.publishNowPlaying(info: playbackInfo, artwork: image)
             }
+        }
+    }
+}
+
+/// AVAudioSession activation and engine start/stop can wait for the audio service.
+/// Keep all audio resources on one queue, including their creation and release.
+/// The queue is shared because AVAudioSession is process-wide.
+private final class PlaybackAudioSessionWorker: @unchecked Sendable {
+    private static let queue = DispatchQueue(label: "com.pilipod.playback-audio-session", qos: .userInitiated)
+    // Accessed only on queue. A departing page must not deactivate its successor.
+    private static weak var owner: PlaybackAudioSessionWorker?
+    private var engine: AVAudioEngine?
+    private var configurationObserver: NSObjectProtocol?
+    private var isSessionActive = false
+    private var wantsPlayback = false
+    private var isInterrupted = false
+
+    func activate() {
+        Self.queue.async {
+            if let previous = Self.owner, previous !== self {
+                previous.wantsPlayback = false
+                previous.isSessionActive = false
+                previous.releaseEngine()
+            }
+            Self.owner = self
+            self.wantsPlayback = true
+            self.isInterrupted = false
+            self.ensureReady()
+        }
+    }
+
+    func setPlaying(_ playing: Bool) {
+        Self.queue.async {
+            guard Self.owner === self else { return }
+            self.wantsPlayback = playing
+            if playing {
+                self.ensureReady()
+            } else if self.engine?.isRunning == true {
+                self.engine?.stop()
+            }
+        }
+    }
+
+    func deactivate() {
+        Self.queue.async {
+            self.wantsPlayback = false
+            self.releaseEngine()
+            self.isSessionActive = false
+            guard Self.owner === self else { return }
+            Self.owner = nil
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            } catch {
+                self.record(error, context: "停用音频会话")
+            }
+        }
+    }
+
+    func interruptionBegan() {
+        Self.queue.async {
+            guard Self.owner === self else { return }
+            self.isInterrupted = true
+            self.isSessionActive = false
+            self.engine?.stop()
+        }
+    }
+
+    func interruptionEnded() {
+        Self.queue.async {
+            guard Self.owner === self else { return }
+            self.isInterrupted = false
+            self.wantsPlayback = true
+            self.ensureReady()
+        }
+    }
+
+    func mediaServicesReset(isPlaying: Bool) {
+        Self.queue.async {
+            guard Self.owner === self else { return }
+            self.releaseEngine()
+            self.isSessionActive = false
+            self.isInterrupted = false
+            self.wantsPlayback = isPlaying
+            if isPlaying { self.ensureReady() }
+        }
+    }
+
+    private func ensureReady() {
+        guard wantsPlayback, !isInterrupted else { return }
+        do {
+            let session = AVAudioSession.sharedInstance()
+            if !isSessionActive {
+                try session.setCategory(.playback, mode: .moviePlayback)
+                try session.setActive(true)
+                isSessionActive = true
+            }
+            let engine = self.engine ?? makeEngine()
+            if !engine.isRunning { try engine.start() }
+        } catch {
+            record(error, context: "准备播放音频会话")
+        }
+    }
+
+    private func makeEngine() -> AVAudioEngine {
+        let engine = AVAudioEngine()
+        let sourceNode = AVAudioSourceNode { _, _, _, audioBufferList -> OSStatus in
+            for buffer in UnsafeMutableAudioBufferListPointer(audioBufferList) {
+                if let pointer = buffer.mData {
+                    memset(pointer, 0, Int(buffer.mDataByteSize))
+                }
+            }
+            return noErr
+        }
+        engine.attach(sourceNode)
+        engine.connect(
+            sourceNode,
+            to: engine.mainMixerNode,
+            format: AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)
+        )
+        self.engine = engine
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            Self.queue.async { [weak self] in
+                guard let self, Self.owner === self else { return }
+                self.ensureReady()
+            }
+        }
+        return engine
+    }
+
+    private func releaseEngine() {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+        }
+        configurationObserver = nil
+        engine?.stop()
+        engine = nil
+    }
+
+    private func record(_ error: Error, context: String) {
+        DispatchQueue.main.async {
+            ErrorLogService.record(error, context: context)
+        }
+    }
+
+    deinit {
+        // A retained PiP page can outlive its SwiftUI destination. Even when
+        // explicit deactivation is skipped, release engine resources off main.
+        let engine = engine
+        let observer = configurationObserver
+        Self.queue.async {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            engine?.stop()
         }
     }
 }

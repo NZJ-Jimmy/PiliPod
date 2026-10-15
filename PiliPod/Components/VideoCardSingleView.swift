@@ -11,6 +11,7 @@ struct VideoCardSingleView: View {
     let video: VideoItem
     let progress: Int?
     let namespace: Namespace.ID
+    let unavailable: Bool
     let onTap: () -> Void
 
     @State private var sponsorLabel: SponsorBlockVideoLabel?
@@ -33,10 +34,11 @@ struct VideoCardSingleView: View {
         return "\(Self.formatDuration(progress))/\(video.durationFormatted)"
     }
 
-    init(video: VideoItem, progress: Int? = nil, namespace: Namespace.ID, onTap: @escaping () -> Void) {
+    init(video: VideoItem, progress: Int? = nil, namespace: Namespace.ID, unavailable: Bool = false, onTap: @escaping () -> Void) {
         self.video = video
         self.progress = progress
         self.namespace = namespace
+        self.unavailable = unavailable
         self.onTap = onTap
     }
 
@@ -45,18 +47,29 @@ struct VideoCardSingleView: View {
             HStack(alignment: .top, spacing: 12) {
                 // 左侧封面（用于卡片→详情页的 Hero 动画）
                 ZStack(alignment: .bottomTrailing) {
-                    CachedAsyncImage(url: URL(string: video.cover)) { phase in
-                        if case .success(let image) = phase {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            Rectangle()
-                                .fill(Color(.systemGray5))
+                    if unavailable {
+                        Rectangle()
+                            .fill(Color(.systemGray5))
+                            .overlay {
+                                Image(systemName: "video.slash")
+                                    .font(.system(size: 30, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(width: 140, height: 88)
+                    } else {
+                        CachedAsyncImage(url: URL(string: video.cover)) { phase in
+                            if case .success(let image) = phase {
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Rectangle()
+                                    .fill(Color(.systemGray5))
+                            }
                         }
+                        .frame(width: 140, height: 88)
+                        .clipped()
                     }
-                    .frame(width: 140, height: 88)
-                    .clipped()
 
                     Text(durationBadgeText)
                         .font(.system(size: 11, weight: .medium))
@@ -94,7 +107,7 @@ struct VideoCardSingleView: View {
                     // 右侧顶部：标题（允许多行）
                     Text(video.title)
                         .font(.system(size: 14, weight: .medium))
-                        .lineLimit(nil)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .foregroundStyle(.primary)
 
@@ -138,6 +151,7 @@ struct VideoCardSingleView: View {
             }
             .padding(10)
             .frame(height: 108)
+            .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
@@ -161,16 +175,20 @@ struct VideoCardSingleView: View {
             .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
+        .disabled(unavailable)
         .contextMenu {
-            Button {
-                addToWatchLater()
-            } label: {
-                Label("稍后再看", systemImage: "clock.badge")
+            if !unavailable {
+                Button {
+                    addToWatchLater()
+                } label: {
+                    Label("稍后再看", systemImage: "clock.badge")
+                }
+                .disabled(isAddingToWatchLater)
             }
-            .disabled(isAddingToWatchLater)
         }
         .toast(message: $watchLaterMessage)
         .task(id: video.bvid) {
+            guard !unavailable else { return }
             sponsorLabel = await SponsorBlockAPI.fetchPrimaryVideoLabelIfAvailable(videoID: video.bvid)
         }
     }

@@ -1,0 +1,64 @@
+name: Verify bottom search and My messages
+
+on:
+  push:
+    branches: [codex/bottom-search-my-messages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bottom-search-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.6'
+      - name: Select simulator
+        run: |
+          mkdir -p build
+          xcrun simctl list devices available -j > build/devices.json
+          python3 - <<'PY'
+          import json, os
+          devices = json.load(open('build/devices.json'))['devices']
+          candidates = [(runtime, d) for runtime, ds in devices.items() if 'iOS' in runtime for d in ds if 'iPhone' in d['name'] and d['isAvailable']]
+          runtime, device = sorted(candidates, key=lambda pair: pair[0], reverse=True)[0]
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('SIMULATOR_ID=' + device['udid'] + '\n')
+          print(runtime, device['name'])
+          PY
+      - name: Run unit and bottom navigation UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project PiliPod.xcodeproj -scheme PiliPod \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -resultBundlePath build/BottomSearchTests.xcresult \
+            -only-testing:PiliPodTests -only-testing:PiliPodUITests/BottomSearchUITests \
+            -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee build/test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Bottom-search-test-results
+          path: |
+            build/*.log
+            build/BottomSearchTests.xcresult
+      - name: Export UI test screenshots
+        if: always()
+        run: |
+          if [ -d build/BottomSearchTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/BottomSearchTests.xcresult --output-path build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Bottom-search-UI-screenshots
+          path: build/screenshots

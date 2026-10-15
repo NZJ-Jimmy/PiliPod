@@ -3,9 +3,28 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject private var loginSession = LoginSession.shared
 
+    @State private var accountError: String?
+
     var body: some View {
         List {
             Section {
+                NavigationLink {
+                    AccountSettingsView()
+                } label: {
+                    SettingsCategoryRow(title: "账号与隐私", systemImage: "person.2.fill", tint: .purple)
+                }
+            }
+            Section {
+                NavigationLink {
+                    MyPageSettingsView()
+                } label: {
+                    SettingsCategoryRow(
+                        title: "我的页面",
+                        systemImage: "person.crop.rectangle",
+                        tint: .purple
+                    )
+                }
+
                 NavigationLink {
                     RecommendSettingsView()
                 } label: {
@@ -79,7 +98,8 @@ struct SettingsView: View {
 
             Section {
                 Button {
-                    LoginImportService.clearLoginState()
+                    do { try LoginImportService.clearLoginState() }
+                    catch { accountError = error.localizedDescription }
                 } label: {
                     SettingsCategoryRow(
                         title: "退出登录",
@@ -91,6 +111,9 @@ struct SettingsView: View {
                 .disabled(!loginSession.isLogin)
             }
         }
+        .alert("操作失败", isPresented: Binding(get: { accountError != nil }, set: { if !$0 { accountError = nil } })) {
+            Button("确定") { accountError = nil }
+        } message: { Text(accountError ?? "") }
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .listStyle(.insetGrouped)

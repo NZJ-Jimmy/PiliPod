@@ -15,6 +15,7 @@ struct AppSettingsBackupPayload: Codable {
         var danmaku: DanmakuEngineConfig?
         var sponsorBlock: SponsorBlockSettings?
         var errorLogMaximumEntryCount: Int?
+        var myPage: MyPageSettings?
 
         private enum CodingKeys: String, CodingKey {
             case recommendSource
@@ -23,6 +24,7 @@ struct AppSettingsBackupPayload: Codable {
             case danmaku
             case sponsorBlock
             case errorLogMaximumEntryCount
+            case myPage
         }
 
         init(
@@ -31,7 +33,8 @@ struct AppSettingsBackupPayload: Codable {
             subtitle: SubtitleSettings? = nil,
             danmaku: DanmakuEngineConfig? = nil,
             sponsorBlock: SponsorBlockSettings? = nil,
-            errorLogMaximumEntryCount: Int? = nil
+            errorLogMaximumEntryCount: Int? = nil,
+            myPage: MyPageSettings? = nil
         ) {
             self.recommendSource = recommendSource
             self.audioVideo = audioVideo
@@ -39,6 +42,7 @@ struct AppSettingsBackupPayload: Codable {
             self.danmaku = danmaku
             self.sponsorBlock = sponsorBlock
             self.errorLogMaximumEntryCount = errorLogMaximumEntryCount
+            self.myPage = myPage
         }
 
         init(from decoder: Decoder) throws {
@@ -49,6 +53,7 @@ struct AppSettingsBackupPayload: Codable {
             danmaku = try container.decodeIfPresent(DanmakuEngineConfig.self, forKey: .danmaku)
             sponsorBlock = try container.decodeIfPresent(SponsorBlockSettings.self, forKey: .sponsorBlock)
             errorLogMaximumEntryCount = try container.decodeIfPresent(Int.self, forKey: .errorLogMaximumEntryCount)
+            myPage = try container.decodeIfPresent(MyPageSettings.self, forKey: .myPage)
         }
     }
 
@@ -91,6 +96,7 @@ enum AppSettingsBackupError: LocalizedError {
     }
 }
 
+@MainActor
 enum AppSettingsBackupService {
     static func makePayload() -> AppSettingsBackupPayload {
         AppSettingsBackupPayload(
@@ -100,7 +106,8 @@ enum AppSettingsBackupService {
                 subtitle: SubtitleSettingsStore.load(),
                 danmaku: DanmakuConfigStore.load(),
                 sponsorBlock: SponsorBlockSettingsStore.load(),
-                errorLogMaximumEntryCount: ErrorLogService.shared.maximumEntryCount
+                errorLogMaximumEntryCount: ErrorLogService.shared.maximumEntryCount,
+                myPage: MyPageSettingsStore.shared.settings
             )
         )
     }
@@ -138,6 +145,10 @@ enum AppSettingsBackupService {
     }
 
     static func apply(_ payload: AppSettingsBackupPayload) {
+        if let myPage = payload.settings.myPage {
+            MyPageSettingsStore.shared.settings = myPage.normalized
+        }
+
         if let recommendSource = payload.settings.recommendSource {
             RecommendSettingsStore.saveSource(recommendSource)
         }

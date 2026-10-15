@@ -93,7 +93,8 @@ struct MessageView: View {
                 } else {
                     ForEach(privateSessions) { session in
                         PrivateMessageSessionRow(session: session)
-                            .messageListRow()
+                            .messageListRow(showSeparator: true)
+                            .alignmentGuide(.listRowSeparatorLeading) { _ in 80 }
                             .contentShape(Rectangle())
                             .onTapGesture { selectedSession = session }
                     }
@@ -226,9 +227,9 @@ private struct PrivateMessageSessionRow: View {
 }
 
 private extension View {
-    func messageListRow() -> some View {
+    func messageListRow(showSeparator: Bool = false) -> some View {
         listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-            .listRowSeparator(.hidden)
+            .listRowSeparator(showSeparator ? .visible : .hidden)
             .listRowBackground(Color.clear)
     }
 }

@@ -159,6 +159,24 @@ struct UserSpaceDynamicItem: Identifiable, Hashable {
         !author.name.isEmpty || !text.isEmpty || !images.isEmpty || video != nil || live != nil || previewCard != nil || original != nil
     }
 
+    // 空间专栏接口直接给出 opus 摘要；使用当前已选 UP 元数据，不逐条请求详情。
+    static func makeArticle(from raw: SpaceDynamicJSONValue, author: DynamicFeedAuthor?, mid: Int) -> UserSpaceDynamicItem? {
+        guard let value = raw.objectValue, let id = value.string("opus_id"),
+              let link = normalizedURL(value.string("jump_url")) else { return nil }
+        let authorValue = value["author"]?.objectValue ?? [:]
+        let title = value.string("content") ?? "专栏"
+        return UserSpaceDynamicItem(
+            id: id, type: "DYNAMIC_TYPE_ARTICLE",
+            author: Author(mid: mid, name: authorValue.string("name", "uname") ?? author?.uname ?? "用户专栏",
+                           faceURL: normalizedURL(authorValue.string("face") ?? author?.face),
+                           publishTime: value.string("pub_time"), publishTimestamp: value.int("pub_ts")),
+            opusTitle: title, richText: [], images: [], video: nil, live: nil,
+            previewCard: PreviewCard(title: title, subtitle: "专栏", coverURL: normalizedURL(value["cover"]?.objectValue?.string("url")), link: link),
+            statistics: Statistics(like: value["stat"]?.objectValue?.int("like") ?? 0, reply: 0, forward: 0, likeActive: false),
+            commentTarget: CommentTarget(commentID: nil, resourceID: nil, type: nil), original: nil
+        )
+    }
+
     static func make(from raw: SpaceDynamicJSONValue, depth: Int = 0) -> UserSpaceDynamicItem? {
         guard let object = raw.objectValue else { return nil }
         let modules = object["modules"]?.objectValue ?? [:]

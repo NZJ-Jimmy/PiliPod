@@ -65,7 +65,21 @@ struct PiliPodApp: App {
 
     var body: some Scene {
         WindowGroup {
+#if DEBUG
+            if ConversationUITestFixture.enabled {
+                ConversationUITestHost()
+            } else if ProcessInfo.processInfo.arguments.contains("--uitest-video-detail-gestures") {
+                VideoDetailGestureTestRoot()
+            } else if ProcessInfo.processInfo.arguments.contains("--library-layout-fixtures") {
+                LibraryLayoutFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("-dynamic-feed-ui-testing") {
+                DynamicView(testViewModel: DynamicFeedUITestFixture.makeModel(), testAccountMID: 42)
+            } else {
+                MainTabView()
+            }
+#else
             MainTabView()
+#endif
         }
     }
 }

@@ -13,19 +13,27 @@ struct VideoCommentsTabView: View {
     let onOpenUserSpace: (Int) -> Void
     let allowsPosting: Bool
     let isEmbedded: Bool
+    let initialCommentRpid: Int?
+    let onClose: (() -> Void)?
 
-    init(aid: Int, onOpenUserSpace: @escaping (Int) -> Void) {
-        self.init(oid: Int64(aid), commentType: 1, onOpenUserSpace: onOpenUserSpace, allowsPosting: true, isEmbedded: false)
+    init(aid: Int, initialCommentRpid: Int? = nil, onClose: (() -> Void)? = nil, onOpenUserSpace: @escaping (Int) -> Void) {
+        self.init(oid: Int64(aid), commentType: 1, onOpenUserSpace: onOpenUserSpace, allowsPosting: true, isEmbedded: false, initialCommentRpid: initialCommentRpid, onClose: onClose)
     }
 
-    init(oid: Int64, commentType: Int, onOpenUserSpace: @escaping (Int) -> Void, allowsPosting: Bool = true, isEmbedded: Bool = false) {
+    init(oid: Int64, commentType: Int, onOpenUserSpace: @escaping (Int) -> Void, allowsPosting: Bool = true, isEmbedded: Bool = false, initialCommentRpid: Int? = nil, onClose: (() -> Void)? = nil) {
         self.oid = oid
         self.commentType = commentType
         self.onOpenUserSpace = onOpenUserSpace
         self.allowsPosting = allowsPosting
         self.isEmbedded = isEmbedded
+        self.initialCommentRpid = initialCommentRpid
+        self.onClose = onClose
     }
 
+    @State private var didScrollToInitialComment = false
+    @State private var detailRequestID = UUID()
+    @State private var sortOrder = AudioVideoSettingsStore.load().commentSortOrder
+    @State private var mainRequestID = UUID()
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var errorText: String?
@@ -45,62 +53,16 @@ struct VideoCommentsTabView: View {
     @State private var composerContext: ComposerContext = .mainComment
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Group {
-                if isLoading {
-                    VStack(spacing: 10) {
-                        ProgressView()
-                        Text("评论加载中…")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 24)
-                } else if let errorText {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("评论加载失败")
-                            .font(.subheadline.weight(.semibold))
-                        Text(errorText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(16)
-                } else if isInDetailMode, let root = detailRootComment {
-                    detailListView(root: root)
-                } else if comments.isEmpty {
-                    Text("暂无评论")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(16)
-                } else {
-                    if isEmbedded {
-                        LazyVStack(spacing: 0) { mainCommentRows }
-                    } else {
-                        List { mainCommentRows }
-                            .listStyle(.plain)
-                    }
+        Group {
+            if isEmbedded {
+                commentsContent
+            } else {
+                NavigationStack {
+                    commentsContent
+                        .navigationTitle("评论")
+                        .navigationBarTitleDisplayMode(.inline)
                 }
             }
-
-            if allowsPosting { Button {
-                composerContext = defaultComposerContext
-                composerDetent = .fraction(0.5)
-                showComposer = true
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .foregroundStyle(.primary)
-                    .frame(width: 30, height: 30)
-                    .padding(10)
-                    .glassEffect(
-                        .regular.interactive(),
-                        in: Circle()
-                    )
-            }
-            .tint(.primary)
-            .padding(.trailing, 24)
-            .padding(.bottom, 24) }
         }
         .sheet(isPresented: Binding(get: { allowsPosting && showComposer }, set: { showComposer = $0 })) {
             CommentComposerSheet(
@@ -122,7 +84,16 @@ struct VideoCommentsTabView: View {
             .presentationDetents([.fraction(0.5), .fraction(0.78)], selection: $composerDetent)
             .presentationDragIndicator(.visible)
         }
-        .task(id: oid) {
+        .onReceive(NotificationCenter.default.publisher(for: .audioVideoSettingsDidChange)) { notification in
+            if let settings = notification.object as? AudioVideoSettings { sortOrder = settings.commentSortOrder }
+        }
+        .onChange(of: sortOrder) { _, order in
+            var updated = AudioVideoSettingsStore.load()
+            guard updated.commentSortOrder != order else { return }
+            updated.commentSortOrder = order
+            AudioVideoSettingsStore.save(updated)
+        }
+        .task(id: "\(oid)-\(commentType)-\(sortOrder.rawValue)") {
             guard oid > 0 else { return }
             hasLoaded = false
             hasMore = true
@@ -131,6 +102,111 @@ struct VideoCommentsTabView: View {
             resetDetailMode()
             await loadComments()
         }
+    }
+
+    private var commentsContent: some View {
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                Picker("评论排序", selection: $sortOrder) {
+                    ForEach(VideoCommentSortOrder.allCases, id: \.self) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                Group {
+                    if isLoading {
+                        VStack(spacing: 10) {
+                            ProgressView()
+                            Text("评论加载中…")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 24)
+                    } else if let errorText {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("评论加载失败")
+                                .font(.subheadline.weight(.semibold))
+                            Text(errorText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(16)
+                    } else if comments.isEmpty {
+                        Text("暂无评论")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(16)
+                    } else {
+                        if isEmbedded {
+                            LazyVStack(spacing: 0) { mainCommentRows }
+                        } else {
+                            ScrollViewReader { proxy in
+                                List { mainCommentRows }
+                                    .listStyle(.plain)
+                                    .task(id: comments.map(\.rpid)) {
+                                        guard !didScrollToInitialComment,
+                                              let rpid = initialCommentRpid,
+                                              comments.contains(where: { $0.rpid == rpid }) else { return }
+                                        await Task.yield()
+                                        guard !Task.isCancelled else { return }
+                                        proxy.scrollTo(rpid, anchor: .top)
+                                        didScrollToInitialComment = true
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
+
+            composerButton
+        }
+        .toolbar { closeToolbar }
+        .navigationDestination(isPresented: Binding(
+            get: { isInDetailMode },
+            set: { if !$0 { resetDetailMode() } }
+        )) {
+            ZStack(alignment: .bottomTrailing) {
+                if let root = detailRootComment { detailListView(root: root) }
+                composerButton
+            }
+            .navigationTitle("评论")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { closeToolbar }
+        }
+
+    }
+
+    @ToolbarContentBuilder
+    private var closeToolbar: some ToolbarContent {
+        if let onClose {
+            ToolbarItem(placement: .confirmationAction) { Button("完成", action: onClose) }
+        }
+    }
+
+    @ViewBuilder
+    private var composerButton: some View {
+        if allowsPosting { Button {
+            composerContext = defaultComposerContext
+            composerDetent = .fraction(0.5)
+            showComposer = true
+        } label: {
+            Image(systemName: "square.and.pencil")
+                .foregroundStyle(.primary)
+                .frame(width: 30, height: 30)
+                .padding(10)
+                .glassEffect(
+                    .regular.interactive(),
+                    in: Circle()
+                )
+        }
+        .tint(.primary)
+        .padding(.trailing, 24)
+        .padding(.bottom, 24) }
     }
 
     private var isInDetailMode: Bool {
@@ -155,6 +231,7 @@ struct VideoCommentsTabView: View {
                 }
             )
             .padding(.horizontal, isEmbedded ? 16 : 0)
+            .id(item.rpid)
         }
         if hasMore {
             HStack(spacing: 8) {
@@ -179,23 +256,6 @@ struct VideoCommentsTabView: View {
     @ViewBuilder
     private func detailListView(root: CommentItem) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button {
-                    resetDetailMode()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("返回")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-
             if detailIsLoading {
                 VStack(spacing: 8) {
                     ProgressView()
@@ -308,17 +368,25 @@ struct VideoCommentsTabView: View {
 
     @MainActor
     private func loadComments() async {
+        let requestID = UUID()
+        mainRequestID = requestID
+        let requestedSortOrder = sortOrder
         isLoading = true
         errorText = nil
-        defer { isLoading = false }
+        defer { if mainRequestID == requestID { isLoading = false } }
 
         do {
-            let reply = try await BiliAPI.shared.fetchVideoCommentMainList(oid: oid, type: commentType)
+            let reply = try await BiliAPI.shared.fetchVideoCommentMainList(oid: oid, type: commentType, mode: requestedSortOrder.apiMode)
+            try Task.checkCancellation()
+            guard mainRequestID == requestID, sortOrder == requestedSortOrder else { return }
             comments = reply.replies.map { toCommentItem($0) }
             nextCursor = reply.cursor.next
             hasMore = !reply.cursor.isEnd && !reply.replies.isEmpty
             hasLoaded = true
+        } catch is CancellationError {
+            return
         } catch {
+            guard mainRequestID == requestID else { return }
             ErrorLogService.record(error, context: "加载评论")
             errorText = error.localizedDescription
             print("[Comments] load failed: \(error.localizedDescription)")
@@ -328,6 +396,8 @@ struct VideoCommentsTabView: View {
     @MainActor
     private func loadMoreCommentsIfNeeded() async {
         guard hasLoaded, hasMore, !isLoadingMore, oid > 0 else { return }
+        let requestID = mainRequestID
+        let requestedSortOrder = sortOrder
         isLoadingMore = true
         defer { isLoadingMore = false }
 
@@ -335,8 +405,10 @@ struct VideoCommentsTabView: View {
             let reply = try await BiliAPI.shared.fetchVideoCommentMainList(
                 oid: oid,
                 type: commentType,
-                next: nextCursor
+                next: nextCursor,
+                mode: requestedSortOrder.apiMode
             )
+            guard mainRequestID == requestID, sortOrder == requestedSortOrder else { return }
             let appended = reply.replies.map { toCommentItem($0) }
             comments.append(contentsOf: appended)
             nextCursor = reply.cursor.next
@@ -350,13 +422,15 @@ struct VideoCommentsTabView: View {
     @MainActor
     private func openDetailMode(with comment: CommentItem) async {
         guard comment.rpid > 0 else { return }
+        let requestID = UUID()
+        detailRequestID = requestID
         detailRootComment = comment
         detailReplies = []
         detailErrorText = nil
         detailNextCursor = 0
         detailHasMore = true
         detailIsLoading = true
-        defer { detailIsLoading = false }
+        defer { if detailRequestID == requestID { detailIsLoading = false } }
 
         do {
             let response = try await BiliAPI.shared.fetchVideoCommentDetailList(
@@ -365,11 +439,13 @@ struct VideoCommentsTabView: View {
                 rootRpid: Int64(comment.rpid),
                 next: 0
             )
+            guard detailRequestID == requestID else { return }
             detailRootComment = toCommentItem(response.root)
             detailReplies = response.root.replies.map { toCommentItem($0) }
             detailNextCursor = response.cursor.next
             detailHasMore = !response.cursor.isEnd && !response.root.replies.isEmpty
         } catch {
+            guard detailRequestID == requestID else { return }
             ErrorLogService.record(error, context: "加载评论详情")
             detailErrorText = error.localizedDescription
         }
@@ -382,8 +458,9 @@ struct VideoCommentsTabView: View {
               detailHasMore,
               !detailIsLoadingMore,
               oid > 0 else { return }
+        let requestID = detailRequestID
         detailIsLoadingMore = true
-        defer { detailIsLoadingMore = false }
+        defer { if detailRequestID == requestID { detailIsLoadingMore = false } }
 
         do {
             let response = try await BiliAPI.shared.fetchVideoCommentDetailList(
@@ -392,6 +469,7 @@ struct VideoCommentsTabView: View {
                 rootRpid: Int64(root.rpid),
                 next: detailNextCursor
             )
+            guard detailRequestID == requestID else { return }
             let appended = response.root.replies.map { toCommentItem($0) }
             detailReplies.append(contentsOf: appended)
             detailNextCursor = response.cursor.next
@@ -403,6 +481,7 @@ struct VideoCommentsTabView: View {
 
     @MainActor
     private func resetDetailMode() {
+        detailRequestID = UUID()
         detailRootComment = nil
         detailReplies = []
         detailErrorText = nil
